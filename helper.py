@@ -12,7 +12,7 @@ load_dotenv()
 from openai import AzureOpenAI
 
 from langchain.chains.question_answering import load_qa_chain
-from langchain_openai import AzureOpenAI as langchainAzureOpenAI
+from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
 
 def processSrtFile(srtFile):
@@ -182,9 +182,15 @@ class Config:
         envImportSuccess = True
 
         for credPart in self.openAIParams:
-            self.openAIParams[credPart] = self.configFetch(
-                "OPENAI_API_" + credPart, self.openAIParams[credPart], str
-            )
+
+            if credPart == "BASE":
+                self.openAIParams[credPart] = self.configFetch(
+                    "AZURE_OPENAI_ENDPOINT", self.openAIParams[credPart], str
+                )
+            else:
+                self.openAIParams[credPart] = self.configFetch(
+                    "OPENAI_API_" + credPart, self.openAIParams[credPart], str
+                )
             envImportSuccess = (
                 False
                 if not self.openAIParams[credPart] or not envImportSuccess
@@ -198,6 +204,19 @@ class Config:
 
 
 class OpenAIBot:
+    """
+    A class representing an OpenAI Bot.
+
+    Attributes:
+        config (dict): The configuration parameters for the bot.
+        messages (list): A list to store the messages.
+        model (str): The model used by the bot.
+        client (AzureOpenAI): An instance of the AzureOpenAI client.
+
+    Methods:
+        __init__(self, config): Initializes a new instance of the OpenAIBot class.
+    """
+
     def __init__(self, config):
         self.config = config
         self.messages = []
@@ -213,6 +232,20 @@ class OpenAIBot:
 
 
 class LangChainBot:
+    """
+    A class representing a language chain bot.
+
+    Attributes:
+        config (object): The configuration object for the bot.
+        messages (list): A list to store messages.
+        model (str): The model used by the bot.
+        client (object): The client object for the Azure OpenAI service.
+        chain (object): The QA chain object.
+
+    Methods:
+        __init__(self, config): Initializes the LangChainBot object.
+    """
+
     def __init__(self, config):
         self.config = config
         self.messages = []
