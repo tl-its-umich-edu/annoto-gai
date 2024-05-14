@@ -120,6 +120,24 @@ def getcombinedTranscripts(
     return combinedTranscripts
 
 
+def getBinCount(combinedTranscript, windowSize=120):
+    """
+    Calculates the number of bins based on the combined transcript and window size.
+
+    Parameters:
+    combinedTranscript (DataFrame): The combined transcript containing the start and end times.
+    windowSize (int): The size of each window in seconds. Default is 120.
+
+    Returns:
+    int: The number of bins calculated based on the video duration and window size.
+    """
+    videoDuration = (
+        combinedTranscript["End"].iloc[-1] - combinedTranscript["Start"].iloc[0]
+    )
+    binCount = int(videoDuration.total_seconds() // windowSize)
+    return binCount
+
+
 class Config:
     """
     A class that represents the configuration settings for the application.
@@ -258,6 +276,7 @@ class LangChainBot:
             azure_endpoint=self.config.openAIParams["BASE"],
             organization=self.config.openAIParams["ORGANIZATION"],
             azure_deployment=self.config.openAIParams["MODEL"],
+            temperature=0,
         )
 
         self.chain = load_qa_chain(
