@@ -1,18 +1,21 @@
 import logging
 import os
-import sys
-from datetime import datetime
 import glob
+import sys
+import pickle
+from datetime import datetime
 import pandas as pd
+
+from openai import AzureOpenAI
+from langchain.chains.question_answering import load_qa_chain
+from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
+
+from bertopic import BERTopic
+from bertopic.representation import KeyBERTInspired, OpenAI, LangChain
 
 from dotenv import load_dotenv
 
 load_dotenv()
-
-from openai import AzureOpenAI
-
-from langchain.chains.question_answering import load_qa_chain
-from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
 
 def processSrtFile(srtFile):
@@ -93,7 +96,7 @@ def lineCombiner(transcript, windowSize=20):
     return pd.DataFrame(combinedTranscript)
 
 
-def getcombinedTranscripts(
+def getCombinedTranscripts(
     captionsFolder="Captions",
     videoNames=["New Quizzes Video", "Rearrange Playlist video"],
 ):
@@ -120,6 +123,117 @@ def getcombinedTranscripts(
     return combinedTranscripts
 
 
+def retrieveTopics(
+    videoToUse,
+    transcriptToUse,
+    config,
+    model="langchain",
+    overwrite=False,
+):
+    """
+    Retrieves topics from the given transcript using the specified model.
+
+    Args:
+        videoToUse (str): The name of the video to use.
+        transcriptToUse (str): The transcript to use for topic extraction.
+        config (Config): The configuration object.
+        model (str, optional): The model to use for topic extraction. Defaults to "langchain".
+
+    Returns:
+        tuple: A tuple containing the topics over time and the topic model.
+    """
+    saveName = f"{videoToUse}_{model}"
+
+    saveFound = True
+    topicModelSavePath = os.path.join(config.saveFolder, "topicModel", saveName)
+    topicsOverTimeSavePath = os.path.join(
+        config.saveFolder, "topicsOverTime", saveName + ".p"
+    )
+
+    if os.path.exists(topicModelSavePath):
+        topicModel = BERTopic.load(topicModelSavePath)
+    else:
+        saveFound = False
+
+    if os.path.exists(topicsOverTimeSavePath):
+        with open(topicsOverTimeSavePath, "rb") as f:
+            topicsOverTime = pickle.load(f)
+    else:
+        saveFound = False
+
+    if not saveFound or overwrite:
+        topicsOverTime, topicModel = getTopicsOverTime(
+            transcriptToUse, model="langchain", config=config
+        )
+        topicModel.save(
+            topicModelSavePath,
+            serialization="safetensors",
+            save_ctfidf=True,
+            save_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        )
+        pickle.dump(topicsOverTime, open(topicsOverTimeSavePath, "wb"))
+
+    return topicsOverTime, topicModel
+
+
+def getTopicsOverTime(combinedTranscript, config, model="langchain"):
+    """
+    Get topics over time from a combined transcript using a specified model.
+
+    Args:
+        combinedTranscript (DataFrame): The combined transcript containing the lines and timestamps.
+        model (str): The model to use for topic representation. Valid options are "simple", "openai", and "langchain".
+        config (dict, optional): Configuration parameters for the model. Defaults to None.
+
+    Returns:
+        topicsOverTime (DataFrame): The topics over time.
+
+    Raises:
+        None
+
+    """
+
+    if model == "simple" or config is None:
+        representation_model = KeyBERTInspired()
+
+    if model == "openai":
+        import tiktoken
+
+        OpenAIChatBot = OpenAIBot(config)
+        tokenizer = tiktoken.encoding_for_model(OpenAIChatBot.model)
+        representation_model = OpenAI(
+            OpenAIChatBot.client,
+            model=OpenAIChatBot.model,
+            delay_in_seconds=2,
+            chat=True,
+            nr_docs=8,
+            doc_length=None,
+            tokenizer=tokenizer,
+        )
+    if model == "langchain":
+        LangChainQABot = LangChainBot(config)
+        chain = LangChainQABot.chain
+        prompt = "Give a single label that is only a few words long to summarizw what these documents are about"
+        representation_model = LangChain(chain, prompt=prompt)
+
+    topicModel = BERTopic(representation_model=representation_model)
+
+    docs = combinedTranscript["Combined Lines"].tolist()
+    timestamps = combinedTranscript["Start"].tolist()
+
+    topics, probs = topicModel.fit_transform(docs)
+
+    # hierarchical_topics = topic_model.hierarchical_topics(docs)
+    # topic_model.visualize_hierarchy(hierarchical_topics=hierarchical_topics)
+
+    binCount = getBinCount(combinedTranscript, windowSize=120)
+    topicsOverTime = topicModel.topics_over_time(docs, timestamps, nr_bins=binCount)
+
+    # topicModel.visualize_topics_over_time(topicsOverTime)
+
+    return topicsOverTime, topicModel
+
+
 def getBinCount(combinedTranscript, windowSize=120):
     """
     Calculates the number of bins based on the combined transcript and window size.
@@ -136,6 +250,152 @@ def getBinCount(combinedTranscript, windowSize=120):
     )
     binCount = int(videoDuration.total_seconds() // windowSize)
     return binCount
+
+
+def getMaxTopics(topicsOverTime, combinedTranscript):
+    """
+    Get the maximum topics based on frequency over time.
+
+    Args:
+        topicsOverTime (DataFrame): A DataFrame containing information about topics over time.
+
+    Returns:
+        dict: A dictionary containing the maximum topics with their corresponding details.
+
+    """
+    if "Name" not in topicsOverTime.columns:
+        topicsOverTime["Name"] = topicsOverTime["Words"].apply(
+            lambda wordList: f"Keywords: {wordList}"
+        )
+
+    timestampStack = []
+    for group in topicsOverTime.groupby("Timestamp"):
+        timestampStack.append(
+            group[1].sort_values("Frequency", ascending=False).head(1)
+        )
+
+    binnedTopics = pd.concat(timestampStack).sort_values("Timestamp")
+    binnedTopics = binnedTopics[binnedTopics["Topic"] != -1]
+
+    binnedTopics = (
+        binnedTopics.groupby(
+            (binnedTopics["Topic"] != binnedTopics["Topic"].shift()).cumsum()
+        )
+        .agg(
+            {
+                "Topic": "first",
+                "Words": "first",
+                "Frequency": "sum",
+                "Timestamp": "first",
+                "Name": "first",
+            }
+        )
+        .reset_index(drop=True)
+    )
+
+    binnedTopics["Start"] = binnedTopics["Timestamp"]
+    binnedTopics["End"] = binnedTopics["Timestamp"].shift(-1)
+
+    binnedTopics.at[binnedTopics.index[0], "Start"] = combinedTranscript["Start"].iloc[
+        0
+    ]
+    binnedTopics.at[binnedTopics.index[-1], "End"] = combinedTranscript["End"].iloc[-1]
+
+    binnedTopics = binnedTopics.drop("Timestamp", axis=1)
+
+    maxStack = []
+    for group in binnedTopics.groupby("Topic"):
+        maxStack.append(group[1].sort_values("Frequency", ascending=False).head(1))
+
+    maxTopics = pd.concat(maxStack).sort_values("Start")
+    maxTopics["Cleaned Name"] = maxTopics["Name"].apply(
+        lambda name: name.lstrip("0123456789_., ").rstrip("0123456789_., ")
+    )
+    maxTopics = maxTopics.set_index("Cleaned Name").to_dict(orient="index")
+
+    return maxTopics
+
+
+def questionTaskBuilder(topic, relevantText):
+    """
+    Generate a multiple choice type question based on the given topic and relevant text.
+
+    Args:
+        topic (str): The topic for the question.
+        relevantText (str): The relevant text to base the question on.
+
+    Returns:
+        str: A formatted string representing the generated question task in JSON format.
+
+    Example:
+        For the topic: "Geography", generate a multiple choice type question based on the following transcribed text: "The capital of France is Paris."
+        There should be four possible answers, with only one being the correct answer. Also provide a short reason for why each answer is correct or incorrect.
+        Return the data in the following JSON format as an example: {"question": "What is the capital of France?", "answers": ["Paris", "London", "Berlin", "Madrid"], "correct": "Paris", "reason": "Paris is the capital of France"}
+    """
+    questionTask = f"""For the topic: {topic}, generate a multiple choice type question based on the following transcribed text: {relevantText}
+There should be four possible answers, with one being the correct answers. Also Provide a short reason to why each answer is correct or incorrect.
+Return the data in the following JSON format as an example: {{"question": "What is the capital of France?", "answers": ["Paris", "London", "Berlin", "Madrid"], "correct": "Paris", "reason": "Paris is the capital of France"}}"""
+
+    return questionTask
+
+
+def getRelevantText(maxTopics, combinedTranscript):
+    """
+    Retrieves relevant text from the combined transcript based on the given maxTopics.
+
+    Args:
+        combinedTranscript (DataFrame): The combined transcript containing the relevant sentences.
+        maxTopics (dict): A dictionary containing the maxTopics and their corresponding start and end times.
+
+    Returns:
+        dict: A modified version of the maxTopics dictionary with the relevant text and question text added.
+    """
+    for topic in maxTopics:
+        relevantSentences = combinedTranscript[
+            (combinedTranscript["Start"] > maxTopics[topic]["Start"])
+            & (combinedTranscript["End"] < maxTopics[topic]["End"])
+        ]
+        maxTopics[topic]["Relevant Text"] = " ".join(
+            relevantSentences["Combined Lines"].tolist()
+        )
+        maxTopics[topic]["Question Text"] = questionTaskBuilder(
+            topic, maxTopics[topic]["Relevant Text"]
+        )
+
+    return maxTopics
+
+
+def questionGenerator(topicTexts, config):
+    """
+    Generates questions for a given topic based on the provided relevant transcription text from a video.
+
+    Args:
+        topicTexts (dict): A dictionary containing topic texts and corresponding question text.
+
+    Returns:
+        dict: A dictionary containing the updated topic texts with generated questions.
+    """
+    OpenAIChatBot = OpenAIBot(config)
+
+    for topic in topicTexts:
+        response = OpenAIChatBot.client.chat.completions.create(
+            model=OpenAIChatBot.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a question-generating bot that generates questions for a given topic based on the provided relevant trancription text from a video.",
+                },
+                {"role": "user", "content": topicTexts[topic]["Question Text"]},
+            ],
+            temperature=0,
+            stop=None,
+        )
+
+        responseText = response.choices[0].message.content
+
+        topicTexts[topic]["JSON"] = responseText
+
+    return topicTexts
 
 
 class Config:
@@ -157,6 +417,14 @@ class Config:
             "MODEL": None,
             "ORGANIZATION": None,
         }
+
+        self.saveFolder = "savedTopics"
+        self.fileTypes = ["topicModel", "topicsOverTime"]
+
+        for folder in self.fileTypes:
+            folderPath = os.path.join(self.saveFolder, folder)
+            if not os.path.exists(folderPath):
+                os.makedirs(folderPath)
 
     def set(self, name, value):
         if name in self.__dict__:
