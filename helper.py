@@ -17,9 +17,11 @@ from bertopic import BERTopic
 from bertopic.representation import KeyBERTInspired, OpenAI, LangChain
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import numpy
+
 numpy.seterr(divide="ignore")
 
 
@@ -42,22 +44,21 @@ def processSrtFile(srtFile):
     transcript = []
 
     sentence = ""
-    start_time = ""
-    end_time = ""
+    startTime, endTime = "", ""
 
     for line in lines:
         line = line.strip()
         if line.isdigit():
             continue
         elif "-->" in line:
-            start_time, end_time = line.split("-->")
-            start_time = datetime.strptime(start_time.strip(), "%H:%M:%S,%f")  # .time()
-            end_time = datetime.strptime(end_time.strip(), "%H:%M:%S,%f")  # .time()
+            startTime, endTime = line.split("-->")
+            startTime = datetime.strptime(startTime.strip(), "%H:%M:%S,%f")  # .time()
+            endTime = datetime.strptime(endTime.strip(), "%H:%M:%S,%f")  # .time()
         elif line:
             sentence += " " + line
         else:
             transcript.append(
-                {"Line": sentence.strip(), "Start": start_time, "End": end_time}
+                {"Line": sentence.strip(), "Start": startTime, "End": endTime}
             )
             sentence = ""
 
@@ -102,8 +103,8 @@ def lineCombiner(transcript, windowSize=20):
 
 
 def getCombinedTranscripts(
+    videoNames,
     captionsFolder="Captions",
-    videoNames=["New Quizzes Video", "Rearrange Playlist video"],
     windowSize=30,
 ):
     """
@@ -118,10 +119,10 @@ def getCombinedTranscripts(
         dict: A dictionary containing the combined transcripts for each video, where the keys are the video names and the values are the combined transcripts.
     """
 
-    srtFiles = {}
-    transcripts = {}
-    sentences = {}
-    combinedTranscripts = {}
+    if type(videoNames) == str:
+        videoNames = [videoNames]
+
+    srtFiles, transcripts, sentences, combinedTranscripts = {}, {}, {}, {}
     for video in videoNames:
         srtFiles[video] = glob.glob(f"{captionsFolder}/{video}/*.srt")
         transcripts[video] = processSrtFile(srtFiles[video])
@@ -130,6 +131,9 @@ def getCombinedTranscripts(
             transcripts[video], windowSize=windowSize
         )
 
+    if len(videoNames) == 1:
+        return combinedTranscripts[videoNames[0]]
+    
     return combinedTranscripts
 
 
