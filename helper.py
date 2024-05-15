@@ -10,12 +10,17 @@ from openai import AzureOpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
+from keybert import KeyBERT
+from sklearn.feature_extraction.text import CountVectorizer
+
 from bertopic import BERTopic
 from bertopic.representation import KeyBERTInspired, OpenAI, LangChain
 
 from dotenv import load_dotenv
-
 load_dotenv()
+
+import numpy
+numpy.seterr(divide="ignore")
 
 
 def processSrtFile(srtFile):
@@ -99,17 +104,20 @@ def lineCombiner(transcript, windowSize=20):
 def getCombinedTranscripts(
     captionsFolder="Captions",
     videoNames=["New Quizzes Video", "Rearrange Playlist video"],
+    windowSize=30,
 ):
     """
-    Retrieves combined transcripts for multiple videos.
+    Retrieves and combines transcripts from SRT files for the specified videos.
 
     Args:
-        captionsFolder (str, optional): The folder where the caption files are located. Defaults to "Captions".
-        videoNames (list, optional): The names of the videos for which to retrieve the transcripts. Defaults to ["New Quizzes Video", "Rearrange Playlist video"].
+        captionsFolder (str, optional): The folder where the SRT files are located. Defaults to "Captions".
+        videoNames (list, optional): The names of the videos to retrieve transcripts for. Defaults to ["New Quizzes Video", "Rearrange Playlist video"].
+        windowSize (int, optional): The size of the window in seconds for combining lines. Defaults to 30.
 
     Returns:
-        dict: A dictionary containing the combined transcripts for each video.
+        dict: A dictionary containing the combined transcripts for each video, where the keys are the video names and the values are the combined transcripts.
     """
+
     srtFiles = {}
     transcripts = {}
     sentences = {}
@@ -118,85 +126,101 @@ def getCombinedTranscripts(
         srtFiles[video] = glob.glob(f"{captionsFolder}/{video}/*.srt")
         transcripts[video] = processSrtFile(srtFiles[video])
         sentences[video] = " ".join(transcripts[video]["Line"].tolist())
-        combinedTranscripts[video] = lineCombiner(transcripts[video], windowSize=30)
+        combinedTranscripts[video] = lineCombiner(
+            transcripts[video], windowSize=windowSize
+        )
 
     return combinedTranscripts
 
 
 def retrieveTopics(
-    videoToUse,
-    transcriptToUse,
-    config,
-    model="langchain",
-    overwrite=False,
+    videoToUse, transcriptToUse, config, overwrite=False, saveNameAppend=""
 ):
     """
-    Retrieves topics from the given transcript using the specified model.
+    Retrieves or generates topic model and data.
 
     Args:
-        videoToUse (str): The name of the video to use.
-        transcriptToUse (str): The transcript to use for topic extraction.
-        config (Config): The configuration object.
-        model (str, optional): The model to use for topic extraction. Defaults to "langchain".
+        videoToUse (str): Path to the video file.
+        transcriptToUse (str): Path to the transcript file.
+        config (dict): Configuration settings.
+        overwrite (bool, optional): Whether to overwrite existing data. Defaults to False.
+        saveNameAppend (str, optional): String to append to the save name. Defaults to "".
 
     Returns:
         tuple: A tuple containing the topics over time and the topic model.
     """
-    saveName = f"{videoToUse}_{model}"
 
-    saveFound = True
-    topicModelSavePath = os.path.join(config.saveFolder, "topicModel", saveName)
-    topicsOverTimeSavePath = os.path.join(
-        config.saveFolder, "topicsOverTime", saveName + ".p"
+    if (
+        (topicModel := dataLoader(config, "topicModel", videoToUse, saveNameAppend))
+        is not False
+        and (
+            topicsOverTime := dataLoader(
+                config, "topicsOverTime", videoToUse, saveNameAppend
+            )
+        )
+        is not False
+        and not overwrite
+    ):
+        logging.info("Topic Model and Data loaded from saved files.")
+        return topicsOverTime, topicModel
+
+    logging.info("Generating & saving Topic Model and Data.")
+    topicsOverTime, topicModel = getTopicsOverTime(transcriptToUse, config=config)
+    dataSaver(topicModel, config, "topicModel", videoToUse, saveNameAppend)
+    dataSaver(
+        topicsOverTime,
+        config,
+        "topicsOverTime",
+        videoToUse,
+        saveNameAppend,
     )
-
-    if os.path.exists(topicModelSavePath):
-        topicModel = BERTopic.load(topicModelSavePath)
-    else:
-        saveFound = False
-
-    if os.path.exists(topicsOverTimeSavePath):
-        with open(topicsOverTimeSavePath, "rb") as f:
-            topicsOverTime = pickle.load(f)
-    else:
-        saveFound = False
-
-    if not saveFound or overwrite:
-        topicsOverTime, topicModel = getTopicsOverTime(
-            transcriptToUse, model="langchain", config=config
-        )
-        topicModel.save(
-            topicModelSavePath,
-            serialization="safetensors",
-            save_ctfidf=True,
-            save_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
-        )
-        pickle.dump(topicsOverTime, open(topicsOverTimeSavePath, "wb"))
 
     return topicsOverTime, topicModel
 
 
-def getTopicsOverTime(combinedTranscript, config, model="langchain"):
+def getVectorizer(docs):
     """
-    Get topics over time from a combined transcript using a specified model.
+    Returns a CountVectorizer model initialized with a vocabulary extracted from the given documents.
+
+    Parameters:
+    - docs (list): A list of documents to extract keywords from.
+
+    Returns:
+    - vectorizer_model (CountVectorizer): A CountVectorizer model initialized with the extracted vocabulary.
+    """
+    kw_model = KeyBERT()
+    keywords = kw_model.extract_keywords(docs, keyphrase_ngram_range=(1, 2))
+
+    vocabulary = [k[0] for keyword in keywords for k in keyword]
+    vocabulary = list(set(vocabulary))
+
+    vectorizer_model = CountVectorizer(vocabulary=vocabulary)
+    return vectorizer_model
+
+
+def getTopicsOverTime(combinedTranscript, config):
+    """
+    Get topics over time from a combined transcript.
 
     Args:
         combinedTranscript (DataFrame): The combined transcript containing the lines and timestamps.
-        model (str): The model to use for topic representation. Valid options are "simple", "openai", and "langchain".
-        config (dict, optional): Configuration parameters for the model. Defaults to None.
+        config (Config): The configuration object specifying the representation model type and other settings.
 
     Returns:
-        topicsOverTime (DataFrame): The topics over time.
+        tuple: A tuple containing the topics over time and the topic model.
 
     Raises:
         None
 
     """
 
-    if model == "simple" or config is None:
+    docs = combinedTranscript["Combined Lines"].tolist()
+    timestamps = combinedTranscript["Start"].tolist()
+
+    if config.representationModelType == "simple" or config is None:
         representation_model = KeyBERTInspired()
 
-    if model == "openai":
+    if config.representationModelType == "openai":
         import tiktoken
 
         OpenAIChatBot = OpenAIBot(config)
@@ -210,16 +234,19 @@ def getTopicsOverTime(combinedTranscript, config, model="langchain"):
             doc_length=None,
             tokenizer=tokenizer,
         )
-    if model == "langchain":
+    if config.representationModelType == "langchain":
         LangChainQABot = LangChainBot(config)
         chain = LangChainQABot.chain
-        prompt = "Give a single label that is only a few words long to summarizw what these documents are about"
+        prompt = "Give a single label that is only a few words long to summarize what these documents are about"
         representation_model = LangChain(chain, prompt=prompt)
 
-    topicModel = BERTopic(representation_model=representation_model)
-
-    docs = combinedTranscript["Combined Lines"].tolist()
-    timestamps = combinedTranscript["Start"].tolist()
+    if config.useKeyBERT:
+        topicModel = BERTopic(
+            representation_model=representation_model,
+            vectorizer_model=getVectorizer(docs),
+        )
+    else:
+        topicModel = BERTopic(representation_model=representation_model)
 
     topics, probs = topicModel.fit_transform(docs)
 
@@ -365,6 +392,98 @@ def getRelevantText(maxTopics, combinedTranscript):
     return maxTopics
 
 
+def retrieveQuestionData(
+    videoToUse, topicTexts, config, overwrite=False, saveNameAppend=""
+):
+    """
+    Retrieve question data for a given video and topic texts.
+
+    Args:
+        videoToUse (str): The video to use for generating question data.
+        topicTexts (list): List of topic texts to generate questions from.
+        config (dict): Configuration settings for question generation.
+        overwrite (bool, optional): Whether to overwrite existing question data. Defaults to False.
+        saveNameAppend (str, optional): Additional string to append to the save name. Defaults to "".
+
+    Returns:
+        list: The generated question data.
+
+    """
+    if (
+        questionData := dataLoader(config, "questionData", videoToUse, saveNameAppend)
+    ) is not False and not overwrite:
+        logging.info("Question Data loaded from saved files.")
+        return questionData
+
+    logging.info("Generating & saving Question Data.")
+    questionData = questionGenerator(topicTexts, config)
+    dataSaver(questionData, config, "questionData", videoToUse, saveNameAppend)
+
+    return questionData
+
+
+def dataSaver(data, config, dataType, videoToUse, saveNameAppend=""):
+    """
+    Save the data based on the specified configuration.
+
+    Args:
+        data: The data to be saved.
+        config: The configuration object.
+        dataType: The type of data being saved.
+        videoToUse: The video identifier.
+        saveNameAppend: An optional string to append to the save name.
+
+    Returns:
+        The path where the data is saved.
+    """
+    if config.useKeyBERT:
+        saveNameAppend = f"_KeyBERT{saveNameAppend}"
+    saveName = f"{videoToUse}_{config.representationModelType}{saveNameAppend}"
+    savePath = os.path.join(config.saveFolder, dataType, saveName)
+
+    if dataType == "topicModel":
+        data.save(
+            savePath,
+            serialization="safetensors",
+            save_ctfidf=True,
+            save_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+        )
+    if dataType in ["topicsOverTime", "questionData"]:
+        pickle.dump(data, open(savePath + ".p", "wb"))
+
+    return savePath
+
+
+def dataLoader(config, dataType, videoToUse, saveNameAppend=""):
+    """
+    Load data based on the specified configuration, data type, video to use, and save name appendix.
+
+    Parameters:
+    - config: The configuration object.
+    - dataType: The type of data to load.
+    - videoToUse: The video to use for loading the data.
+    - saveNameAppend: An optional appendix to add to the save name.
+
+    Returns:
+    - The loaded data if it exists, otherwise False.
+    """
+    if config.useKeyBERT:
+        saveNameAppend = f"_KeyBERT{saveNameAppend}"
+    if dataType in ["topicsOverTime", "questionData"]:
+        saveNameAppend = f"{saveNameAppend}.p"
+
+    saveName = f"{videoToUse}_{config.representationModelType}{saveNameAppend}"
+    savePath = os.path.join(config.saveFolder, dataType, saveName)
+
+    if os.path.exists(savePath):
+        if dataType == "topicModel":
+            return BERTopic.load(savePath)
+        if dataType in ["topicsOverTime", "questionData"]:
+            return pickle.load(open(savePath, "rb"))
+
+    return False
+
+
 def questionGenerator(topicTexts, config):
     """
     Generates questions for a given topic based on the provided relevant transcription text from a video.
@@ -400,11 +519,7 @@ def questionGenerator(topicTexts, config):
 
 class Config:
     """
-    A class that represents the configuration settings for the application.
-
-    Attributes:
-        logLevel (int): The logging level for the application.
-        openAIParams (dict): A dictionary containing the OpenAI API parameters.
+    Configuration class for managing application settings.
     """
 
     def __init__(self):
@@ -418,15 +533,28 @@ class Config:
             "ORGANIZATION": None,
         }
 
-        self.saveFolder = "savedTopics"
-        self.fileTypes = ["topicModel", "topicsOverTime"]
+        self.saveFolder = "savedData"
+        self.fileTypes = ["topicModel", "topicsOverTime", "questionData"]
 
         for folder in self.fileTypes:
             folderPath = os.path.join(self.saveFolder, folder)
             if not os.path.exists(folderPath):
                 os.makedirs(folderPath)
 
+        self.representationModelType = "langchain"
+        self.useKeyBERT = True
+
     def set(self, name, value):
+        """
+        Set the value of a configuration parameter.
+
+        Args:
+            name (str): The name of the configuration parameter.
+            value: The value to be set.
+
+        Raises:
+            NameError: If the name is not accepted in the `set()` method.
+        """
         if name in self.__dict__:
             self.name = value
         else:
@@ -435,6 +563,19 @@ class Config:
     def configFetch(
         self, name, default=None, casting=None, validation=None, valErrorMsg=None
     ):
+        """
+        Fetch a configuration parameter from the environment variables.
+
+        Args:
+            name (str): The name of the configuration parameter.
+            default: The default value to be used if the parameter is not found in the environment variables.
+            casting (type): The type to cast the parameter value to.
+            validation (callable): A function to validate the parameter value.
+            valErrorMsg (str): The error message to be logged if the validation fails.
+
+        Returns:
+            The value of the configuration parameter, or None if it is not found or fails validation.
+        """
         value = os.environ.get(name, default)
         if casting is not None:
             try:
@@ -451,6 +592,9 @@ class Config:
         return value
 
     def setFromEnv(self):
+        """
+        Set configuration parameters from environment variables.
+        """
         try:
             self.logLevel = str(os.environ.get("LOG_LEVEL", self.logLevel)).upper()
         except ValueError:

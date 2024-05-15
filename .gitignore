@@ -160,4 +160,7 @@ cython_debug/
 #.idea/
 
 Captions/
-savedTopics/
+Images/
+savedData/
+captionProcessor - Tester.ipynb
+captionProcessor - To Present.ipynb
