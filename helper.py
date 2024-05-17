@@ -133,11 +133,11 @@ class Config:
         self.logLevel = logging.INFO
 
         self.openAIParams: dict = {
-            "KEY": None,
-            "BASE": None,
-            "VERSION": None,
-            "MODEL": None,
-            "ORGANIZATION": None,
+            "KEY": '',
+            "BASE": '',
+            "VERSION": '',
+            "MODEL": '',
+            "ORGANIZATION": '',
         }
 
         self.captionsFolder = "Captions"
@@ -195,6 +195,11 @@ class Config:
         """
         Set configuration parameters from environment variables.
         """
+        if not os.path.exists(".env"):
+            errorMsg = "No .env file found. Please configure your environment variables use the .env.sample file as a template."
+            logging.error(errorMsg)
+            sys.exit(errorMsg)
+
         try:
             self.logLevel = str(os.environ.get("LOG_LEVEL", self.logLevel)).upper()
         except ValueError:
@@ -215,11 +220,11 @@ class Config:
 
             if credPart == "BASE":
                 self.openAIParams[credPart] = self.configFetch(
-                    "AZURE_OPENAI_ENDPOINT", self.openAIParams[credPart], str
+                    "AZURE_OPENAI_ENDPOINT", self.openAIParams[credPart], str, lambda param: len(param) > 0
                 )
             else:
                 self.openAIParams[credPart] = self.configFetch(
-                    "OPENAI_API_" + credPart, self.openAIParams[credPart], str
+                    "OPENAI_API_" + credPart, self.openAIParams[credPart], str, lambda param: len(param) > 0
                 )
             envImportSuccess = (
                 False
