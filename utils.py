@@ -2,6 +2,7 @@ import os
 import pickle
 
 from bertopic import BERTopic
+import logging
 
 
 def dataSaver(data, config, dataType, videoToUse, saveNameAppend=""):
@@ -64,3 +65,27 @@ def dataLoader(config, dataType, videoToUse, saveNameAppend=""):
         return pickle.load(open(savePath, "rb"))
 
     return False
+
+
+def printAndLog(message, level="info"):
+    """
+    Print a message and log it at the given log level.
+
+    Args:
+        message: The message to be printed and logged.
+        level: The log level (default is "info").
+    """
+    if level == "info":
+        logging.info(message)
+    elif level == "debug":
+        logging.debug(message)
+    elif level == "warning":
+        logging.warning(message)
+    elif level == "error":
+        logging.error(message)
+    elif level == "critical":
+        logging.critical(message)
+    else:
+        raise ValueError(f"Invalid log level: {level}")
+
+    print(message)

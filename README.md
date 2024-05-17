@@ -17,6 +17,13 @@ The `getCombinedTranscripts` function when run on a single video file name will 
 ### Extracting topics:
 The `retrieveTopics` function takes the segmented transcript and return the `BERTopic` model used, and the topics over time that were extracted from the transcript. Read the notes in the notebook as well for further information about adjusting certain parameters in the `config` Class for managing the choice of Representation model used, and the usage of KeyBERT. 
 
+> Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations. 
+
+#### Saving & loading data:
 A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the function will rerun the topic extraction and save an updated version of the data. 
 
-> Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations. 
+`BERTopic` models cannot be saved as pickle files, and need to used their inbuilt saving mechanism to be saved instead of a pickle. All other data saved is stored as a pickle.
+
+## Using the Python Script:
+> Note: Functionality to modify the video transcript name as an Environmental value and within the config will be added in a future commit 
+The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.

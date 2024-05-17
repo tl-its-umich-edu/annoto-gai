@@ -1,6 +1,5 @@
 from config import OpenAIBot, LangChainBot
-from utils import dataLoader, dataSaver
-import logging
+from utils import dataLoader, dataSaver, printAndLog
 from bertopic import BERTopic
 from keybert import KeyBERT
 from sklearn.feature_extraction.text import CountVectorizer
@@ -34,10 +33,10 @@ def retrieveTopics(
         )
         is not False
     ):
-        logging.info("Topic Model and Data loaded from saved files.")
+        printAndLog("Topic Model and Data loaded from saved files.")
         return topicsOverTime, topicModel
 
-    logging.info("Generating & saving Topic Model and Data.")
+    printAndLog("Generating & saving Topic Model and Data.")
     topicsOverTime, topicModel = getTopicsOverTime(transcriptToUse, config=config)
     dataSaver(topicModel, config, "topicModel", videoToUse, saveNameAppend)
     dataSaver(
