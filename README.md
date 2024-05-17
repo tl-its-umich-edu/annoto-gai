@@ -11,3 +11,8 @@ You can access videos from [MiVideo](https://www.mivideo.it.umich.edu/). It is r
 The `captionsProcessor.ipynb` notebook reads captions in the .srt file format provided within the subfolders of the `Captions` folder. Read the notes in the notebook as well for further information about adjusting certain parameters in the `config` Class for managing the choice of Representation model used, and the usage of KeyBERT.
 
 The `getCombinedTranscripts` function when run on a single video file name will return a dataframe of the segmented transcript provided within the subfolders of the `Captions` folder, where each line has an approximate duration, 30s in this case. This will be used for topic extraction and segmentation.
+
+The `retrieveTopics` function takes the segmented transcript and return the `BERTopic` model used, and the topics over time that were extracted from the transcript. A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the function will rerun the topic extraction and save an updated version of the data.
+
+Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations.
+

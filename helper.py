@@ -258,7 +258,7 @@ def getTopicsOverTime(combinedTranscript, config):
     if config.representationModelType == "langchain":
         LangChainQABot = LangChainBot(config)
         chain = LangChainQABot.chain
-        prompt = "Give a single label that is only a few words long to summarize what these documents are about"
+        prompt = "Give a single label that is only a few words long to summarize what these documents are about:"
         representation_model = LangChain(chain, prompt=prompt)
 
     if config.useKeyBERT:
