@@ -1,124 +1,13 @@
 import logging
 import os
-import glob
 import sys
-from datetime import datetime
-import pandas as pd
-
 from dotenv import load_dotenv
 
+from openai import AzureOpenAI
+from langchain.chains.question_answering import load_qa_chain
+from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
-def processSrtFile(srtFile):
-    """
-    Process an SRT file and extract the transcript data.
-
-    Args:
-        srtFile (str or list): The path to the SRT file or a list of paths.
-
-    Returns:
-        pandas.DataFrame: A DataFrame containing the extracted transcript data with columns 'Line', 'Start', and 'End'.
-    """
-    if type(srtFile) == list:
-        srtFile = srtFile[0]
-
-    with open(srtFile, "r") as f:
-        lines = f.readlines()
-
-    transcript = []
-
-    sentence = ""
-    startTime, endTime = "", ""
-
-    for line in lines:
-        line = line.strip()
-        if line.isdigit():
-            continue
-        elif "-->" in line:
-            startTime, endTime = line.split("-->")
-            startTime = datetime.strptime(startTime.strip(), "%H:%M:%S,%f")  # .time()
-            endTime = datetime.strptime(endTime.strip(), "%H:%M:%S,%f")  # .time()
-        elif line:
-            sentence += " " + line
-        else:
-            transcript.append(
-                {"Line": sentence.strip(), "Start": startTime, "End": endTime}
-            )
-            sentence = ""
-
-    return pd.DataFrame(transcript)
-
-
-def lineCombiner(transcript, windowSize=20):
-    """
-    Combines consecutive lines in a transcript within a specified time window.
-
-    Args:
-        transcript (pandas.DataFrame): The transcript data containing columns "Start" and "Line".
-        windowSize (int, optional): The time window size in seconds. Defaults to 20.
-
-    Returns:
-        pandas.DataFrame: A DataFrame containing the combined lines with their start and end times.
-    """
-
-    transcript = transcript.sort_values(by="Start")
-
-    combinedTranscript = []
-
-    currStart = transcript.iloc[0]["Start"]
-
-    while currStart < transcript.iloc[-1]["Start"]:
-        slicedTranscript = transcript[
-            (transcript["Start"] - currStart < pd.Timedelta(seconds=windowSize))
-            & (transcript["Start"] >= currStart)
-        ]
-        combinedLines = " ".join(slicedTranscript["Line"].tolist())
-        combinedTranscript.append(
-            {
-                "Combined Lines": combinedLines,
-                "Start": slicedTranscript.iloc[0]["Start"],
-                "End": slicedTranscript.iloc[-1]["End"],
-            }
-        )
-
-        currStart = slicedTranscript.iloc[-1]["End"]
-
-    return pd.DataFrame(combinedTranscript)
-
-
-def getCombinedTranscripts(
-    videoNames,
-    captionsFolder="Captions",
-    windowSize=30,
-):
-    """
-    Retrieves and combines transcripts from multiple videos.
-
-    Args:
-        videoNames (str or list): The name(s) of the video(s) to retrieve transcripts from.
-        captionsFolder (str, optional): The folder where the caption files are located. Defaults to "Captions".
-        windowSize (int, optional): The size of the window for combining lines in the transcripts. Defaults to 30.
-
-    Returns:
-        dict or str: If only one video name is provided, returns the combined transcript as a string.
-                    If multiple video names are provided, returns a dictionary of combined transcripts for each video.
-    """
-
-    if type(videoNames) == str:
-        videoNames = [videoNames]
-
-    srtFiles, transcripts, sentences, combinedTranscripts = {}, {}, {}, {}
-    for video in videoNames:
-        srtFiles[video] = glob.glob(f"{captionsFolder}/{video}/*.srt")
-        transcripts[video] = processSrtFile(srtFiles[video])
-        sentences[video] = " ".join(transcripts[video]["Line"].tolist())
-        combinedTranscripts[video] = lineCombiner(
-            transcripts[video], windowSize=windowSize
-        )
-
-    if len(videoNames) == 1:
-        return combinedTranscripts[videoNames[0]]
-
-    return combinedTranscripts
+# from langchain_community.callbacks import get_openai_callback
 
 
 class Config:
@@ -140,6 +29,20 @@ class Config:
         self.captionsFolder = "Captions"
         if not os.path.exists(self.captionsFolder):
             os.makedirs(self.captionsFolder)
+
+        self.saveFolder = "savedData"
+        self.fileTypes = ["topicModel", "topicsOverTime"]
+
+        for folder in self.fileTypes:
+            folderPath = os.path.join(self.saveFolder, folder)
+            if not os.path.exists(folderPath):
+                os.makedirs(folderPath)
+
+        self.representationModelType = "langchain"
+        self.useKeyBERT = True
+
+        self.topicTokenCount = 0
+        self.questionTokenCount = 0
 
     def set(self, name, value):
         """
@@ -242,3 +145,107 @@ class Config:
             sys.exit("Exiting due to configuration parameter import problems.")
         else:
             logging.info("All configuration parameters set up successfully.")
+
+
+class OpenAIBot:
+    """
+    A class representing an OpenAI chatbot.
+
+    Attributes:
+        config (object): The configuration object for the chatbot.
+        messages (list): A list of messages exchanged between the user and the chatbot.
+        model (str): The model used by the chatbot.
+        systemPrompt (str): The system prompt used by the chatbot.
+        client (object): The AzureOpenAI client used for making API calls.
+        tokenUsage (int): The total number of tokens used by the chatbot.
+
+    Methods:
+        getResponse(prompt): Generates a response based on the given prompt using the chat model.
+
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.messages = []
+
+        self.model = self.config.openAIParams["MODEL"]
+
+        self.systemPrompt = "You are a question-generating bot that generates questions for a given topic based on the provided relevant trancription text from a video."
+
+        self.client = AzureOpenAI(
+            api_key=self.config.openAIParams["KEY"],
+            api_version=self.config.openAIParams["VERSION"],
+            azure_endpoint=self.config.openAIParams["BASE"],
+            organization=self.config.openAIParams["ORGANIZATION"],
+        )
+
+        self.tokenUsage = 0
+
+    def getResponse(self, prompt):
+        """
+        Generates a response based on the given prompt using the chat model.
+
+        Args:
+            prompt (str): The user's input prompt.
+
+        Returns:
+            str: The generated response.
+
+        """
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": self.systemPrompt,
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0,
+            stop=None,
+        )
+
+        responseText = response.choices[0].message.content
+        self.tokenUsage += response.usage.total_tokens
+
+        return responseText
+
+
+class LangChainBot:
+    """
+    A class representing a language chain bot.
+
+    Attributes:
+        config (object): The configuration object for the bot.
+        messages (list): A list to store messages.
+        model (str): The model used by the bot.
+        client (object): The client object for the Azure OpenAI service.
+        chain (object): The QA chain object.
+
+    Methods:
+        __init__(self, config): Initializes the LangChainBot object.
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.messages = []
+
+        self.model = self.config.openAIParams["MODEL"]
+
+        self.client = langchainAzureOpenAI(
+            api_key=self.config.openAIParams["KEY"],
+            api_version=self.config.openAIParams["VERSION"],
+            azure_endpoint=self.config.openAIParams["BASE"],
+            organization=self.config.openAIParams["ORGANIZATION"],
+            azure_deployment=self.config.openAIParams["MODEL"],
+            temperature=0,
+        )
+
+        self.chain = load_qa_chain(
+            self.client,
+            chain_type="stuff",
+        )
+
+        self.prompt = "Give a single label that is only a few words long to summarize what these documents are about"
+
+        self.tokenUsage = 0
