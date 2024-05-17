@@ -2,13 +2,10 @@ import logging
 import os
 import glob
 import sys
-import pickle
 from datetime import datetime
 import pandas as pd
 
 from dotenv import load_dotenv
-
-load_dotenv()
 
 
 def processSrtFile(srtFile):
@@ -133,11 +130,11 @@ class Config:
         self.logLevel = logging.INFO
 
         self.openAIParams: dict = {
-            "KEY": '',
-            "BASE": '',
-            "VERSION": '',
-            "MODEL": '',
-            "ORGANIZATION": '',
+            "KEY": "",
+            "BASE": "",
+            "VERSION": "",
+            "MODEL": "",
+            "ORGANIZATION": "",
         }
 
         self.captionsFolder = "Captions"
@@ -195,10 +192,13 @@ class Config:
         """
         Set configuration parameters from environment variables.
         """
+
         if not os.path.exists(".env"):
             errorMsg = "No .env file found. Please configure your environment variables use the .env.sample file as a template."
             logging.error(errorMsg)
             sys.exit(errorMsg)
+
+        load_dotenv()
 
         try:
             self.logLevel = str(os.environ.get("LOG_LEVEL", self.logLevel)).upper()
@@ -220,11 +220,17 @@ class Config:
 
             if credPart == "BASE":
                 self.openAIParams[credPart] = self.configFetch(
-                    "AZURE_OPENAI_ENDPOINT", self.openAIParams[credPart], str, lambda param: len(param) > 0
+                    "AZURE_OPENAI_ENDPOINT",
+                    self.openAIParams[credPart],
+                    str,
+                    lambda param: len(param) > 0,
                 )
             else:
                 self.openAIParams[credPart] = self.configFetch(
-                    "OPENAI_API_" + credPart, self.openAIParams[credPart], str, lambda param: len(param) > 0
+                    "OPENAI_API_" + credPart,
+                    self.openAIParams[credPart],
+                    str,
+                    lambda param: len(param) > 0,
                 )
             envImportSuccess = (
                 False
