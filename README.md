@@ -19,12 +19,19 @@ The `retrieveTopics` function takes the segmented transcript and return the `BER
 
 > Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations. 
 
+## Using the Python Script:
+> Note: Functionality to modify the video transcript name as an Environmental value and within the config will be added in a future commit. 
+
+The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.
+
+## Other notes: 
 #### Saving & loading data:
 A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the function will rerun the topic extraction and save an updated version of the data. 
 
 `BERTopic` models cannot be saved as pickle files, and need to used their inbuilt saving mechanism to be saved instead of a pickle. All other data saved is stored as a pickle.
 
-## Using the Python Script:
-> Note: Functionality to modify the video transcript name as an Environmental value and within the config will be added in a future commit. 
-
-The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.
+#### Scripts used:
+Currently, 3 scripts are used:
+1. `utils.py`: Contains common functions used to save and load data, and print and log messages.
+2. `transcriptLoader.py`: Contains functions to handle transcript file loading and initital processing.
+3. `topicExtractor.py`: Contains functions to handle topic extraction from the processed transcript data.
