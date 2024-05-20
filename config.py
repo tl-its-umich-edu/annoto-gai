@@ -30,7 +30,7 @@ class Config:
         if not os.path.exists(self.captionsFolder):
             os.makedirs(self.captionsFolder)
 
-            self.videoToUse = ''
+        self.videoToUse = ''
 
         self.saveFolder = "savedData"
         self.fileTypes = ["topicModel", "topicsOverTime"]
