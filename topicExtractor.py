@@ -36,7 +36,7 @@ def retrieveTopics(
         printAndLog("Topic Model and Data loaded from saved files.")
         return topicsOverTime, topicModel
 
-    printAndLog("Generating & saving Topic Model and Data.")
+    printAndLog("Generating & saving Topic Model and Data...")
     topicsOverTime, topicModel = getTopicsOverTime(transcriptToUse, config=config)
     dataSaver(topicModel, config, "topicModel", videoToUse, saveNameAppend)
     dataSaver(
@@ -46,6 +46,8 @@ def retrieveTopics(
         videoToUse,
         saveNameAppend,
     )
+
+    printAndLog(f"Topic Model and Data generated and saved for current configuration.")
 
     return topicsOverTime, topicModel
 

@@ -25,5 +25,6 @@ A basic saving and loading functionality is also utilized to load in the model a
 `BERTopic` models cannot be saved as pickle files, and need to used their inbuilt saving mechanism to be saved instead of a pickle. All other data saved is stored as a pickle.
 
 ## Using the Python Script:
-> Note: Functionality to modify the video transcript name as an Environmental value and within the config will be added in a future commit 
+> Note: Functionality to modify the video transcript name as an Environmental value and within the config will be added in a future commit. 
+
 The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.
