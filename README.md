@@ -20,7 +20,7 @@ The `retrieveTopics` function takes the segmented transcript and return the `BER
 > Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations. 
 
 ## Using the Python Script:
-> Note: Functionality to modify the video transcript name as an Environmental value and within the config will be added in a future commit. 
+> Note: Video file names can be declared in the `.env` file, or by assigning it manually to `config.videoToUse`. This will be reworked in a future PR/Issue to handle this better in a Class implementation.
 
 The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.
 

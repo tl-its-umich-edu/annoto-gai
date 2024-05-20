@@ -30,6 +30,8 @@ class Config:
         if not os.path.exists(self.captionsFolder):
             os.makedirs(self.captionsFolder)
 
+            self.videoToUse = ''
+
         self.saveFolder = "savedData"
         self.fileTypes = ["topicModel", "topicsOverTime"]
 
@@ -141,6 +143,14 @@ class Config:
                 else True
             )
 
+        self.videoToUse = self.configFetch(
+            "VIDEO_TO_USE",
+            None,
+            str,
+            lambda param: len(param) > 0,
+        )
+        envImportSuccess = False if not self.videoToUse or not envImportSuccess else True
+
         if not envImportSuccess:
             sys.exit("Exiting due to configuration parameter import problems.")
         else:
@@ -228,7 +238,6 @@ class LangChainBot:
 
     def __init__(self, config):
         self.config = config
-        self.messages = []
 
         self.model = self.config.openAIParams["MODEL"]
 

@@ -8,18 +8,18 @@ def main():
     config = Config()
     config.setFromEnv()
 
-    videoToUse = "New Google Assignments in Canvas"
+    config.videoToUse = "New Google Assignments in Canvas"
 
-    printAndLog(f"Retrieving Transcript for {videoToUse}")
+    printAndLog(f"Retrieving Transcript for {config.videoToUse}")
 
     transcriptToUse = getCombinedTranscripts(
-        videoToUse,
+        config.videoToUse,
         captionsFolder=config.captionsFolder,
     )
 
-    printAndLog(f"Retrieving Topics for {videoToUse}")
+    printAndLog(f"Retrieving Topics for {config.videoToUse}")
 
-    topicsOverTime, topicModel = retrieveTopics(videoToUse, transcriptToUse, config=config)
+    topicsOverTime, topicModel = retrieveTopics(config.videoToUse, transcriptToUse, config=config)
 
 if __name__ == "__main__":
     main()
