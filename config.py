@@ -33,7 +33,7 @@ class Config:
         self.windowSize: int = 20
 
         self.saveFolder: str = "savedData"
-        self.fileTypes = ["topicModel", "topicsOverTime"]
+        self.fileTypes = ["topicModel", "topicsOverTime", "questionData"]
 
         for folder in self.fileTypes:
             folderPath = os.path.join(self.saveFolder, folder)
@@ -44,11 +44,12 @@ class Config:
         self.representationModelType: str = "langchain"
         self.useKeyBERT: bool = True
 
+        self.overwriteQuestionData: bool = False
+
         self.langchainPrompt: str = (
             "Give a single label that is only a few words long to summarize what these documents are about."
         )
 
-        # Not currently used
         self.questionPrompt: str = (
             "You are a question-generating bot that generates questions for a given topic based on the provided relevant trancription text from a video."
         )
@@ -177,6 +178,16 @@ class Config:
         )
         envImportSuccess[self.overwriteTopicModel] = (
             False if type(self.overwriteTopicModel) is not bool else True
+        )
+
+        self.overwriteQuestionData = self.configFetch(
+            "OVERWRITE_EXISTING_QUESTIONS",
+            self.overwriteQuestionData,
+            bool,
+            None,
+        )
+        envImportSuccess[self.overwriteQuestionData] = (
+            False if type(self.overwriteQuestionData) is not bool else True
         )
 
         self.useKeyBERT = self.configFetch(

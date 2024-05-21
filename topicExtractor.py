@@ -10,10 +10,12 @@ import openai
 
 # This is to suppress the divide by zero warning from numpy.
 # This is only used during the CountVectorizer call in the vectorizerModel function.
-# THe warning does not impede the function, and will be more confusing to the user if it is shown.
-# HEnce the suppression.
+# The warning does not impede the function, and will be more confusing to the user if it is shown.
+# Hence the suppression.
 from numpy import seterr
+
 seterr(divide="ignore")
+
 
 class TopicModeller:
     """
@@ -151,7 +153,7 @@ class TopicModeller:
 
                 binCount = getBinCount(combinedTranscript, windowSize=120)
 
-                #Link to the function: https://maartengr.github.io/BERTopic/api/bertopic.html#bertopic._bertopic.BERTopic.topics_over_time
+                # Link to the function: https://maartengr.github.io/BERTopic/api/bertopic.html#bertopic._bertopic.BERTopic.topics_over_time
                 self.topicsOverTime = self.topicModel.topics_over_time(
                     docs, timestamps, nr_bins=binCount
                 )
@@ -181,19 +183,31 @@ class TopicModeller:
             )
             return False
 
+    def printTopics(self):
+        """
+        Print the topics.
+        """
 
-def retrieveTopics(config, videoData):
+        getAllTopics = self.topicModel.get_topics()
+        topicList = {topicID: getAllTopics[topicID][0][0] for topicID in getAllTopics}
+        printAndLog(topicList)
+
+
+# Using a manual overwrite option for debugging.
+def retrieveTopics(config, videoData, overwrite=False):
     """
-    Retrieves topics from the given video data using the specified configuration.
+    Retrieves topics using the specified configuration and video data.
 
     Args:
-        config (dict): The configuration settings for topic extraction.
-        videoData (list): The video data used for topic extraction.
+        config (Config): The configuration object.
+        videoData (VideoData): The video data object.
+        overwrite (bool, optional): Whether to overwrite existing topic model and data. Defaults to False.
 
     Returns:
-        TopicModeller: The topic modeller object containing the generated topic model and data.
+        TopicModeller: The topic modeller object containing the generated topics and data.
     """
-    if not config.overwriteTopicModel:
+
+    if not config.overwriteTopicModel and not overwrite:
         topicModeller = TopicModeller(config, load=True)
         if (
             topicModeller.topicModel is not None

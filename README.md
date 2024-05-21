@@ -16,23 +16,28 @@ The `TranscriptData` class when passed a `Config` object with the required video
 
 ### Extracting topics:
 The `retrieveTopics` function takes the segmented transcript and return the `BERTopic` model used, and the topics over time that were extracted from the transcript. 
-The `.env` contains some variables that can be adjusted for toggling KeyBERT and the prompt for the LangCHain component as well. 
+The `.env` contains some variables that can be adjusted for toggling KeyBERT and the prompt for the LangChain component as well. 
 
 > Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations. 
+
+### Generating Questions:
+The `retrieveQuestions` function takes the segmented transcript, and the topic model to produce the generated questions for the given transcript.
 
 ## Using the Python Script:
 The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.
 
 ## Other notes: 
 #### Saving & loading data:
-A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the function will rerun the topic extraction and save an updated version of the data. 
+A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the  `retrieveTopics` or `retrieveQuestions`functions will rerun them to save an updated version of the data. Ideally, use the `.env` to adjust this setting, and only use `overwrite=True` when debugging. 
 
 `BERTopic` models cannot be saved as pickle files, and need to used their inbuilt saving mechanism to be saved instead of a pickle. All other data saved is stored as a pickle.
 This is also why the `TopicModeller` class can't be saved as single entity easily. Saving the model in it needs a different mechanism. 
 In a future implementation, the need for the model being saved itself could be removed, but I do not believe this is viable right now.
 
 #### Scripts used:
-Currently, 3 scripts are used:
-1. `utils.py`: Contains common functions used to save and load data, and print and log messages.
-2. `transcriptLoader.py`: Contains the `TranscriptData` class that handles transcript file loading and initital processing.
-3. `topicExtractor.py`: Contains the `TopicModeller` class and functions to handle topic extraction from the processed transcript data.
+Currently, 5 scripts are used:
+1. `config.py`: Contains the `Config` class used to store environmental and confirugration variables, as well as two other classes for OpenAI and LangChain API usage.
+2. `utils.py`: Contains common functions used to save and load data, and print and log messages.
+3. `transcriptLoader.py`: Contains the `TranscriptData` class that handles transcript file loading and initital processing.
+4. `topicExtractor.py`: Contains the `TopicModeller` class and functions to handle topic extraction from the processed transcript data.
+5. `questionGenerator.py`: Contains the `QuestionData` class and functions to handle and store question generation from the transcript data and extracted topics.
