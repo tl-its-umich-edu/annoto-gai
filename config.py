@@ -40,6 +40,7 @@ class Config:
             if not os.path.exists(folderPath):
                 os.makedirs(folderPath)
 
+        self.overwriteTopicModel: bool = False
         self.representationModelType: str = "langchain"
         self.useKeyBERT: bool = True
 
@@ -167,6 +168,16 @@ class Config:
             lambda x: x > 0,
         )
         envImportSuccess[self.windowSize] = False if not self.windowSize else True
+
+        self.overwriteTopicModel = self.configFetch(
+            "OVERWRITE_EXISTING_TOPICMODEL",
+            self.overwriteTopicModel,
+            bool,
+            None,
+        )
+        envImportSuccess[self.overwriteTopicModel] = (
+            False if type(self.overwriteTopicModel) is not bool else True
+        )
 
         self.useKeyBERT = self.configFetch(
             "USE_KEY_BERT",

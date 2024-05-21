@@ -14,7 +14,9 @@ def main():
 
     printAndLog(f"Retrieving Topics for {config.videoToUse}")
 
-    topicModeller = retrieveTopics(config, videoData, overwrite=False)
+    topicModeller = retrieveTopics(config, videoData)
+
+    print(topicModeller.topicsOverTime.head(5))
 
 if __name__ == "__main__":
     main()

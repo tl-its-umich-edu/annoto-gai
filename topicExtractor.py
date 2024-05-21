@@ -8,6 +8,12 @@ from sklearn.feature_extraction.text import CountVectorizer
 from langchain_community.callbacks import get_openai_callback
 import openai
 
+# This is to suppress the divide by zero warning from numpy.
+# This is only used during the CountVectorizer call in the vectorizerModel function.
+# THe warning does not impede the function, and will be more confusing to the user if it is shown.
+# HEnce the suppression.
+from numpy import seterr
+seterr(divide="ignore")
 
 class TopicModeller:
     """
@@ -138,8 +144,14 @@ class TopicModeller:
         callAttemptCount = 0
         while callAttemptCount < self.callMaxLimit:
             try:
+                # Link to the function: https://maartengr.github.io/BERTopic/api/bertopic.html#bertopic._bertopic.BERTopic.fit_transform
+                # Explanation of what BERTopic is: https://maartengr.github.io/BERTopic/algorithm/algorithm.html
+                # This a rather detailed explanation of the many steps going on within BERTopic, but covers all aspects of it.
                 topics, probs = self.topicModel.fit_transform(docs)
+
                 binCount = getBinCount(combinedTranscript, windowSize=120)
+
+                #Link to the function: https://maartengr.github.io/BERTopic/api/bertopic.html#bertopic._bertopic.BERTopic.topics_over_time
                 self.topicsOverTime = self.topicModel.topics_over_time(
                     docs, timestamps, nr_bins=binCount
                 )
@@ -170,20 +182,18 @@ class TopicModeller:
             return False
 
 
-def retrieveTopics(config, videoData, overwrite=False):
+def retrieveTopics(config, videoData):
     """
     Retrieves topics from the given video data using the specified configuration.
 
     Args:
         config (dict): The configuration settings for topic extraction.
         videoData (list): The video data used for topic extraction.
-        overwrite (bool, optional): Whether to overwrite existing topic model and data. Defaults to False.
-        saveNameAppend (str, optional): An additional string to append to the saved topic model file name. Defaults to "".
 
     Returns:
         TopicModeller: The topic modeller object containing the generated topic model and data.
     """
-    if not overwrite:
+    if not config.overwriteTopicModel:
         topicModeller = TopicModeller(config, load=True)
         if (
             topicModeller.topicModel is not None
@@ -218,10 +228,6 @@ def getVectorizer(combinedTranscript):
     Returns:
     CountVectorizer: A vectorizer model for feature extraction.
     """
-    import numpy
-
-    numpy.seterr(divide="ignore")
-
     docs = combinedTranscript["Combined Lines"].tolist()
     kw_model = KeyBERT()
     keywords = kw_model.extract_keywords(docs, keyphrase_ngram_range=(1, 2))
@@ -229,6 +235,8 @@ def getVectorizer(combinedTranscript):
     vocabulary = [k[0] for keyword in keywords for k in keyword]
     vocabulary = list(set(vocabulary))
 
+    # Link to the function: https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.CountVectorizer.html
+    # Basic explanation of Count Vectorizer: https://towardsdatascience.com/basics-of-countvectorizer-e26677900f9c
     vectorizer_model = CountVectorizer(vocabulary=vocabulary)
     return vectorizer_model
 
