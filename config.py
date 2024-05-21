@@ -1,18 +1,17 @@
 import logging
 import os
 import sys
+import time
 from dotenv import load_dotenv
 
+import openai
 from openai import AzureOpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
-# from langchain_community.callbacks import get_openai_callback
-
-
 class Config:
     """
-    Configuration class for managing application settings.
+    Configuration class for managing various parameters and settings.
     """
 
     def __init__(self):
@@ -26,13 +25,14 @@ class Config:
             "ORGANIZATION": "",
         }
 
-        self.captionsFolder = "Captions"
+        self.captionsFolder: str = "Captions"
         if not os.path.exists(self.captionsFolder):
             os.makedirs(self.captionsFolder)
 
-        self.videoToUse = ''
+        self.videoToUse: str = ""
+        self.windowSize: int = 20
 
-        self.saveFolder = "savedData"
+        self.saveFolder: str = "savedData"
         self.fileTypes = ["topicModel", "topicsOverTime"]
 
         for folder in self.fileTypes:
@@ -40,11 +40,22 @@ class Config:
             if not os.path.exists(folderPath):
                 os.makedirs(folderPath)
 
-        self.representationModelType = "langchain"
-        self.useKeyBERT = True
+        self.representationModelType: str = "langchain"
+        self.useKeyBERT: bool = True
 
-        self.topicTokenCount = 0
-        self.questionTokenCount = 0
+        self.langchainPrompt: str = (
+            "Give a single label that is only a few words long to summarize what these documents are about."
+        )
+
+        # Not currently used
+        self.questionPrompt: str = (
+            "You are a question-generating bot that generates questions for a given topic based on the provided relevant trancription text from a video."
+        )
+
+        self.topicTokenCount: int = 0
+        self.questionTokenCount: int = 0
+
+        self.callMaxLimit: int = 5
 
     def set(self, name, value):
         """
@@ -81,6 +92,8 @@ class Config:
         value = os.environ.get(name, default)
         if casting is not None:
             try:
+                if casting is bool:
+                    value = int(value)
                 value = casting(value)
             except ValueError:
                 errorMsg = f'Casting error for config item "{name}" value "{value}".'
@@ -91,6 +104,7 @@ class Config:
             errorMsg = f'Validation error for config item "{name}" value "{value}".'
             logging.error(errorMsg)
             return None
+
         return value
 
     def setFromEnv(self):
@@ -119,39 +133,72 @@ class Config:
 
         # Currently the code will check and validate all config variables before stopping.
         # Reduces the number of runs needed to validate the config variables.
-        envImportSuccess = True
+        envImportSuccess = {}
 
         for credPart in self.openAIParams:
-
             if credPart == "BASE":
-                self.openAIParams[credPart] = self.configFetch(
-                    "AZURE_OPENAI_ENDPOINT",
-                    self.openAIParams[credPart],
-                    str,
-                    lambda param: len(param) > 0,
-                )
+                envVarName = "AZURE_OPENAI_ENDPOINT"
             else:
-                self.openAIParams[credPart] = self.configFetch(
-                    "OPENAI_API_" + credPart,
-                    self.openAIParams[credPart],
-                    str,
-                    lambda param: len(param) > 0,
-                )
-            envImportSuccess = (
-                False
-                if not self.openAIParams[credPart] or not envImportSuccess
-                else True
+                envVarName = "OPENAI_API_" + credPart
+
+            self.openAIParams[credPart] = self.configFetch(
+                envVarName,
+                self.openAIParams[credPart],
+                str,
+                lambda param: len(param) > 0,
+            )
+            envImportSuccess[self.openAIParams[credPart]] = (
+                False if not self.openAIParams[credPart] else True
             )
 
-        self.videoToUse = self.configFetch(
-            "VIDEO_TO_USE",
-            None,
-            str,
-            lambda param: len(param) > 0,
-        )
-        envImportSuccess = False if not self.videoToUse or not envImportSuccess else True
+        if len(self.videoToUse) == 0:
+            self.videoToUse = self.configFetch(
+                "VIDEO_TO_USE",
+                self.videoToUse,
+                str,
+                lambda name: len(name) > 0,
+            )
+            envImportSuccess[self.videoToUse] = False if not self.videoToUse else True
 
-        if not envImportSuccess:
+        self.windowSize = self.configFetch(
+            "WINDOW_SIZE",
+            self.windowSize,
+            int,
+            lambda x: x > 0,
+        )
+        envImportSuccess[self.windowSize] = False if not self.windowSize else True
+
+        self.useKeyBERT = self.configFetch(
+            "USE_KEY_BERT",
+            self.useKeyBERT,
+            bool,
+            None,
+        )
+        envImportSuccess[self.useKeyBERT] = (
+            False if type(self.useKeyBERT) is not bool else True
+        )
+
+        self.langchainPrompt = self.configFetch(
+            "LANGCHAIN_PROMPT",
+            self.langchainPrompt,
+            str,
+            lambda prompt: len(prompt) > 0,
+        )
+        envImportSuccess[self.langchainPrompt] = (
+            False if not self.langchainPrompt else True
+        )
+
+        self.questionPrompt = self.configFetch(
+            "QUESTION_PROMPT",
+            self.questionPrompt,
+            str,
+            lambda prompt: len(prompt) > 0,
+        )
+        envImportSuccess[self.questionPrompt] = (
+            False if not self.questionPrompt else True
+        )
+
+        if False in envImportSuccess.values():
             sys.exit("Exiting due to configuration parameter import problems.")
         else:
             logging.info("All configuration parameters set up successfully.")
@@ -163,84 +210,125 @@ class OpenAIBot:
 
     Attributes:
         config (object): The configuration object for the chatbot.
-        messages (list): A list of messages exchanged between the user and the chatbot.
-        model (str): The model used by the chatbot.
-        systemPrompt (str): The system prompt used by the chatbot.
-        client (object): The AzureOpenAI client used for making API calls.
+        messages (list): A list to store the chat messages.
+        model (str): The OpenAI model to use for generating responses.
+        systemPrompt (str): The system prompt to include in the chat messages.
+        client (object): The AzureOpenAI client for making API calls.
         tokenUsage (int): The total number of tokens used by the chatbot.
+        callMaxLimit (int): The maximum number of API call attempts allowed.
 
     Methods:
-        getResponse(prompt): Generates a response based on the given prompt using the chat model.
+        getResponse(prompt): Generates a response for the given prompt.
 
     """
 
     def __init__(self, config):
+        """
+        Initializes a new instance of the OpenAIBot class.
+
+        Args:
+            config (object): The configuration object for the chatbot.
+
+        """
         self.config = config
         self.messages = []
-
         self.model = self.config.openAIParams["MODEL"]
-
-        self.systemPrompt = "You are a question-generating bot that generates questions for a given topic based on the provided relevant trancription text from a video."
-
+        self.systemPrompt = self.config.questionPrompt
         self.client = AzureOpenAI(
             api_key=self.config.openAIParams["KEY"],
             api_version=self.config.openAIParams["VERSION"],
             azure_endpoint=self.config.openAIParams["BASE"],
             organization=self.config.openAIParams["ORGANIZATION"],
         )
-
         self.tokenUsage = 0
+
+        if self.config.callMaxLimit is not None:
+            self.callMaxLimit = self.config.callMaxLimit
+        else:
+            self.callMaxLimit = 5
 
     def getResponse(self, prompt):
         """
-        Generates a response based on the given prompt using the chat model.
+        Generates a response for the given prompt.
 
         Args:
-            prompt (str): The user's input prompt.
+            prompt (str): The user prompt for the chatbot.
 
         Returns:
-            str: The generated response.
+            tuple: A tuple containing the response text and a boolean indicating if the response was successful.
 
         """
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": self.systemPrompt,
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0,
-            stop=None,
-        )
+        callComplete = False
+        callAttemptCount = 0
+        while not callComplete and callAttemptCount < self.callMaxLimit:
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": self.systemPrompt,
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    temperature=0,
+                    stop=None,
+                )
+                time.sleep(1)
+                callComplete = True
 
-        responseText = response.choices[0].message.content
-        self.tokenUsage += response.usage.total_tokens
+            except openai.AuthenticationError as e:
+                logging.error(f"Error Message: {e}")
+                sys.exit("Exiting due to invalid OpenAI credentials.")
+            except openai.RateLimitError as e:
+                logging.error(f"Error Message: {e}")
+                logging.error("Rate limit hit. Pausing for a minute.")
+                time.sleep(60)
+                callComplete = False
+            except openai.Timeout as e:
+                logging.error(f"Error Message: {e}")
+                logging.error("Timed out. Pausing for a minute.")
+                time.sleep(60)
+                callComplete = False
+            except Exception as e:
+                logging.error(f"Error Message: {e}")
+                logging.error("Failed to send message. Trying again.")
+                callComplete = False
+            callAttemptCount += 1
 
-        return responseText
+        if callAttemptCount >= self.callMaxLimit:
+            logging.error(
+                f"Failed to send message at max limit of {self.callMaxLimit} times."
+            )
+            sys.exit("Exiting due to too many failed attempts.")
+
+        elif callComplete:
+            responseText = response.choices[0].message.content
+            self.tokenUsage += response.usage.total_tokens
+
+            return responseText, True
 
 
 class LangChainBot:
     """
-    A class representing a language chain bot.
+    Represents a language chain bot.
+
+    Args:
+        config (object): The configuration object containing the necessary parameters.
 
     Attributes:
-        config (object): The configuration object for the bot.
-        messages (list): A list to store messages.
+        config (object): The configuration object.
         model (str): The model used by the bot.
-        client (object): The client object for the Azure OpenAI service.
-        chain (object): The QA chain object.
+        client (object): The langchainAzureOpenAI client.
+        chain (object): The QA chain.
+        prompt (str): The language chain prompt.
+        tokenUsage (int): The number of tokens used.
 
-    Methods:
-        __init__(self, config): Initializes the LangChainBot object.
     """
 
     def __init__(self, config):
         self.config = config
-
         self.model = self.config.openAIParams["MODEL"]
-
         self.client = langchainAzureOpenAI(
             api_key=self.config.openAIParams["KEY"],
             api_version=self.config.openAIParams["VERSION"],
@@ -255,6 +343,5 @@ class LangChainBot:
             chain_type="stuff",
         )
 
-        self.prompt = "Give a single label that is only a few words long to summarize what these documents are about"
-
+        self.prompt = self.config.langchainPrompt
         self.tokenUsage = 0

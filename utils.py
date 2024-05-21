@@ -64,10 +64,10 @@ def dataLoader(config, dataType, videoToUse, saveNameAppend=""):
 
         return pickle.load(open(savePath, "rb"))
 
-    return False
+    return None
 
 
-def printAndLog(message, level="info"):
+def printAndLog(message, level="info", logOnly=False):
     """
     Print a message and log it at the given log level.
 
@@ -88,4 +88,23 @@ def printAndLog(message, level="info"):
     else:
         raise ValueError(f"Invalid log level: {level}")
 
-    print(message)
+    if not logOnly:
+        print(message)
+
+
+def getBinCount(combinedTranscript, windowSize=120):
+    """
+    Calculates the number of bins based on the combined transcript and window size.
+
+    Parameters:
+    combinedTranscript (DataFrame): The combined transcript containing the start and end times.
+    windowSize (int): The size of each window in seconds. Default is 120.
+
+    Returns:
+    int: The number of bins calculated based on the video duration and window size.
+    """
+    videoDuration = (
+        combinedTranscript["End"].iloc[-1] - combinedTranscript["Start"].iloc[0]
+    )
+    binCount = int(videoDuration.total_seconds() // windowSize)
+    return binCount

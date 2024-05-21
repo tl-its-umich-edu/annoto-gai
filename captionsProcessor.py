@@ -1,5 +1,5 @@
 from config import Config
-from transcriptLoader import getCombinedTranscripts
+from transcriptLoader import TranscriptData
 from topicExtractor import retrieveTopics
 from utils import printAndLog
 
@@ -8,18 +8,13 @@ def main():
     config = Config()
     config.setFromEnv()
 
-    config.videoToUse = "New Google Assignments in Canvas"
-
     printAndLog(f"Retrieving Transcript for {config.videoToUse}")
 
-    transcriptToUse = getCombinedTranscripts(
-        config.videoToUse,
-        captionsFolder=config.captionsFolder,
-    )
+    videoData = TranscriptData(config)
 
     printAndLog(f"Retrieving Topics for {config.videoToUse}")
 
-    topicsOverTime, topicModel = retrieveTopics(config.videoToUse, transcriptToUse, config=config)
+    topicModeller = retrieveTopics(config, videoData, overwrite=False)
 
 if __name__ == "__main__":
     main()

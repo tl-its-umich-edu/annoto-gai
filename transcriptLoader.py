@@ -1,116 +1,166 @@
 import glob
+import os
 from datetime import datetime
 import pandas as pd
+from utils import printAndLog
+import sys
 
 
-def processSrtFile(srtFile):
+class TranscriptData:
     """
-    Process an SRT file and extract the transcript data.
+    Class to handle transcript data.
 
     Args:
-        srtFile (str or list): The path to the SRT file or a list of paths.
+        config (object): Configuration object.
 
-    Returns:
-        pandas.DataFrame: A DataFrame containing the extracted transcript data with columns 'Line', 'Start', and 'End'.
+    Attributes:
+        config (object): Configuration object.
+        videoToUse (str): Name of the video to use.
+        srtFiles (list): List of validated SRT files.
+        transcript (DataFrame): Processed transcript data.
+        combinedTranscript (DataFrame): Combined transcript data.
+
+    Methods:
+        validateVideoFiles: Validates the video files.
+        processSrtFiles: Processes the SRT files and extracts transcript data.
+        getCombinedTranscripts: Combines the transcript data based on a window size.
     """
-    if type(srtFile) == list:
-        srtFile = srtFile[0]
 
-    with open(srtFile, "r") as f:
-        lines = f.readlines()
+    def __init__(self, config):
+        self.config = config
+        self.videoToUse = self.config.videoToUse
 
-    transcript = []
+        self.srtFiles = self.validateVideoFiles()
+        self.transcript = self.processSrtFiles()
+        self.combinedTranscript = self.getCombinedTranscripts()
 
-    sentence = ""
-    startTime, endTime = "", ""
+    def validateVideoFiles(self):
+        """
+        Validates the video files.
 
-    for line in lines:
-        line = line.strip()
-        if line.isdigit():
-            continue
-        elif "-->" in line:
-            startTime, endTime = line.split("-->")
-            startTime = datetime.strptime(startTime.strip(), "%H:%M:%S,%f")  # .time()
-            endTime = datetime.strptime(endTime.strip(), "%H:%M:%S,%f")  # .time()
-        elif line:
-            sentence += " " + line
-        else:
-            transcript.append(
-                {"Line": sentence.strip(), "Start": startTime, "End": endTime}
+        Returns:
+            list: List of validated SRT files.
+
+        Raises:
+            SystemExit: If video folder or SRT files are not found.
+        """
+        if not os.path.exists(
+            os.path.join(self.config.captionsFolder, self.videoToUse)
+        ):
+            printAndLog(
+                f"Video folder not found for {self.config.videoToUse} in Caption folder {self.config.captionsFolder}.",
+                level="error",
             )
-            sentence = ""
+            sys.exit("Captions folder not found. Exiting...")
 
-    return pd.DataFrame(transcript)
+        srtFiles = glob.glob(
+            os.path.join(self.config.captionsFolder, self.config.videoToUse, "*.srt")
+        )
+        if len(srtFiles) == 0:
+            printAndLog(
+                f"No SRT files found in {self.config.captionsFolder}/{self.config.videoToUse}.",
+                level="error",
+            )
+            sys.exit("No SRT files found. Exiting...")
 
+        return srtFiles
 
-def lineCombiner(transcript, windowSize=20):
-    """
-    Combines consecutive lines in a transcript within a specified time window.
+    def processSrtFiles(self):
+        """
+        Processes the SRT files and extracts transcript data.
 
-    Args:
-        transcript (pandas.DataFrame): The transcript data containing columns "Start" and "Line".
-        windowSize (int, optional): The time window size in seconds. Defaults to 20.
+        Returns:
+            DataFrame: Processed transcript data.
+        """
+        if len(self.srtFiles) > 1:
+            printAndLog(
+                f"Multiple SRT files found. Using the first one: {self.srtFiles[0]}",
+                LogOnly=True,
+            )
 
-    Returns:
-        pandas.DataFrame: A DataFrame containing the combined lines with their start and end times.
-    """
+        with open(self.srtFiles[0], "r") as f:
+            lines = f.readlines()
 
-    transcript = transcript.sort_values(by="Start")
+        transcript = []
 
-    combinedTranscript = []
+        timeFormat = "%H:%M:%S,%f"
+        arrow = "-->"
 
-    currStart = transcript.iloc[0]["Start"]
+        sentence = ""
+        startTime, endTime = "", ""
 
-    while currStart < transcript.iloc[-1]["Start"]:
-        slicedTranscript = transcript[
-            (transcript["Start"] - currStart < pd.Timedelta(seconds=windowSize))
-            & (transcript["Start"] >= currStart)
-        ]
-        combinedLines = " ".join(slicedTranscript["Line"].tolist())
-        combinedTranscript.append(
-            {
-                "Combined Lines": combinedLines,
-                "Start": slicedTranscript.iloc[0]["Start"],
-                "End": slicedTranscript.iloc[-1]["End"],
-            }
+        for line in lines:
+            line = line.strip()
+            if line.isdigit():
+                continue
+            elif arrow in line:
+                startTime, endTime = line.split(arrow)
+                startTime = datetime.strptime(startTime.strip(), timeFormat)  # .time()
+                endTime = datetime.strptime(endTime.strip(), timeFormat)  # .time()
+            elif line:
+                sentence += " " + line
+            else:
+                transcript.append(
+                    {"Line": sentence.strip(), "Start": startTime, "End": endTime}
+                )
+                sentence = ""
+
+        transcriptDF = pd.DataFrame(transcript)
+        printAndLog(f"Transcript data extracted from {self.srtFiles[0]}", logOnly=True)
+        printAndLog(f"Transcript data shape: {transcriptDF.shape}", logOnly=True)
+        printAndLog(f"Transcript data head: {transcriptDF.head(5)}", logOnly=True)
+
+        if transcriptDF.shape[0] == 0:
+            printAndLog(
+                f"No transcript data found in {self.srtFiles[0]}. Exiting...",
+                level="error",
+            )
+            sys.exit("No transcript data found. Exiting...")
+
+        return transcriptDF
+
+    def getCombinedTranscripts(self):
+        """
+        Combines the transcript data based on a window size.
+
+        Returns:
+            DataFrame: Combined transcript data.
+        """
+        transcript = self.transcript.sort_values(by="Start")
+
+        combinedTranscript = []
+
+        currStart = transcript.iloc[0]["Start"]
+        duration = pd.Timedelta(seconds=self.config.windowSize)
+
+        while currStart < transcript.iloc[-1]["Start"]:
+            slicedTranscript = transcript[
+                (transcript["Start"] - currStart < duration)
+                & (transcript["Start"] >= currStart)
+            ]
+
+            if slicedTranscript.shape[0] == 0:
+                duration = pd.Timedelta(seconds=duration.seconds + 1)
+                continue
+
+            combinedLines = " ".join(slicedTranscript["Line"].tolist())
+            combinedTranscript.append(
+                {
+                    "Combined Lines": combinedLines,
+                    "Start": slicedTranscript.iloc[0]["Start"],
+                    "End": slicedTranscript.iloc[-1]["End"],
+                }
+            )
+
+            currStart = slicedTranscript.iloc[-1]["End"]
+            duration = pd.Timedelta(seconds=self.config.windowSize)
+
+        combinedTranscript = pd.DataFrame(combinedTranscript)
+        printAndLog(
+            f"Combined Transcript data shape: {combinedTranscript.shape}", logOnly=True
+        )
+        printAndLog(
+            f"Combined Transcript data head: {combinedTranscript.head(5)}", logOnly=True
         )
 
-        currStart = slicedTranscript.iloc[-1]["End"]
-
-    return pd.DataFrame(combinedTranscript)
-
-
-def getCombinedTranscripts(
-    videoNames,
-    captionsFolder="Captions",
-    windowSize=30,
-):
-    """
-    Retrieves and combines transcripts from multiple videos.
-
-    Args:
-        videoNames (str or list): The name(s) of the video(s) to retrieve transcripts from.
-        captionsFolder (str, optional): The folder where the caption files are located. Defaults to "Captions".
-        windowSize (int, optional): The size of the window for combining lines in the transcripts. Defaults to 30.
-
-    Returns:
-        dict or str: If only one video name is provided, returns the combined transcript as a string.
-                    If multiple video names are provided, returns a dictionary of combined transcripts for each video.
-    """
-
-    if type(videoNames) == str:
-        videoNames = [videoNames]
-
-    srtFiles, transcripts, sentences, combinedTranscripts = {}, {}, {}, {}
-    for video in videoNames:
-        srtFiles[video] = glob.glob(f"{captionsFolder}/{video}/*.srt")
-        transcripts[video] = processSrtFile(srtFiles[video])
-        sentences[video] = " ".join(transcripts[video]["Line"].tolist())
-        combinedTranscripts[video] = lineCombiner(
-            transcripts[video], windowSize=windowSize
-        )
-
-    if len(videoNames) == 1:
-        return combinedTranscripts[videoNames[0]]
-
-    return combinedTranscripts
+        return combinedTranscript

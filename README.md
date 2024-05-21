@@ -12,16 +12,15 @@ You can access videos from [MiVideo](https://www.mivideo.it.umich.edu/). It is r
 The `captionsProcessor.ipynb` notebook reads captions in the .srt file format provided within the subfolders of the `Captions` folder.  
 
 ### Processing transcripts: 
-The `getCombinedTranscripts` function when run on a single video file name will return a dataframe of the segmented transcript provided within the subfolders of the `Captions` folder, where each line has an approximate duration, 30s in this case. This will be used for topic extraction and segmentation. 
+The `TranscriptData` class when passed a `Config` object with the required video name and credentials will create a class object containing information for the segmented transcript provided within the subfolders of the `Captions` folder, where each line has an approximate duration, 30s default in this case. This will be used for topic extraction and segmentation. 
 
 ### Extracting topics:
-The `retrieveTopics` function takes the segmented transcript and return the `BERTopic` model used, and the topics over time that were extracted from the transcript. Read the notes in the notebook as well for further information about adjusting certain parameters in the `config` Class for managing the choice of Representation model used, and the usage of KeyBERT. 
+The `retrieveTopics` function takes the segmented transcript and return the `BERTopic` model used, and the topics over time that were extracted from the transcript. 
+The `.env` contains some variables that can be adjusted for toggling KeyBERT and the prompt for the LangCHain component as well. 
 
 > Note: Any GenAI-related calls for text generation have been configured to have a temperature of 0 to ensure that the responses received are replicatable and less prone to hallucinations. 
 
 ## Using the Python Script:
-> Note: Video file names can be declared in the `.env` file, or by assigning it manually to `config.videoToUse`. This will be reworked in a future PR/Issue to handle this better in a Class implementation.
-
 The `captionsProcessor.py` script currently runs similarly to the `captionsProcessor.ipynb` notebook, but as one continuous script with no visualization options.
 
 ## Other notes: 
@@ -29,9 +28,11 @@ The `captionsProcessor.py` script currently runs similarly to the `captionsProce
 A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the function will rerun the topic extraction and save an updated version of the data. 
 
 `BERTopic` models cannot be saved as pickle files, and need to used their inbuilt saving mechanism to be saved instead of a pickle. All other data saved is stored as a pickle.
+This is also why the `TopicModeller` class can't be saved as single entity easily. Saving the model in it needs a different mechanism. 
+In a future implementation, the need for the model being saved itself could be removed, but I do not believe this is viable right now.
 
 #### Scripts used:
 Currently, 3 scripts are used:
 1. `utils.py`: Contains common functions used to save and load data, and print and log messages.
-2. `transcriptLoader.py`: Contains functions to handle transcript file loading and initital processing.
-3. `topicExtractor.py`: Contains functions to handle topic extraction from the processed transcript data.
+2. `transcriptLoader.py`: Contains the `TranscriptData` class that handles transcript file loading and initital processing.
+3. `topicExtractor.py`: Contains the `TopicModeller` class and functions to handle topic extraction from the processed transcript data.
