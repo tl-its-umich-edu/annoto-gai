@@ -2,7 +2,7 @@ import pandas as pd
 from utils import dataLoader, dataSaver, printAndLog
 from config import OpenAIBot
 import json
-
+import sys
 
 class QuestionData:
     """
@@ -202,6 +202,15 @@ def getClusteredTopics(videoData, topicModeller):
         .rstrip("0123456789_., ")
     )
 
+    if clusteredTopics.shape[0] == 0:
+        printAndLog(
+            "No clustered topics found. Exiting...", level="error"
+        )
+        sys.exit("No clustered topics found. Exiting...")
+
+    printAndLog(f"Clustered Topics data shape: {clusteredTopics.shape}", logOnly=True)
+    printAndLog(f"Clustered Topics head: {clusteredTopics.head(5)}", logOnly=True)
+
     return clusteredTopics
 
 
@@ -222,6 +231,16 @@ def getDominantTopic(clusteredTopics):
         )
 
     dominantTopics = pd.concat(dominantTopics).sort_values("Start")
+
+    if dominantTopics.shape[0] == 0:
+        printAndLog(
+            "No dominant topics found. Exiting...", level="error"
+        )
+        sys.exit("No dominant topics found. Exiting...")
+
+    printAndLog(f"Dominant Topics data shape: {dominantTopics.shape}", logOnly=True)
+    printAndLog(f"Dominant Topics head: {dominantTopics.head(5)}", logOnly=True)
+
     return dominantTopics.set_index("Topic Title").to_dict(orient="index")
 
 

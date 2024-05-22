@@ -173,7 +173,7 @@ class TopicModeller:
                 time.sleep(60)
             except Exception as e:
                 printAndLog(f"Error Message: {e}")
-                printAndLog("Failed to send message.")
+                printAndLog("Failed to complete fittinf operation on BERTopic.")
                 return False
             callAttemptCount += 1
 
