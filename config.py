@@ -9,6 +9,7 @@ from openai import AzureOpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
+
 class Config:
     """
     Configuration class for managing various parameters and settings.
@@ -222,8 +223,14 @@ class Config:
 
         if False in envImportSuccess.values():
             sys.exit("Exiting due to configuration parameter import problems.")
-        else:
-            logging.info("All configuration parameters set up successfully.")
+
+        if self.overwriteTopicModel == True:
+            self.overwriteQuestionData = True
+            logging.info(
+                "Generated Question data will also be overwritten as Topic Model data is being overwritten."
+            )
+
+        logging.info("All configuration parameters set up successfully.")
 
 
 class OpenAIBot:

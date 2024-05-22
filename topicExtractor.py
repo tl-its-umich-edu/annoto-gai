@@ -223,7 +223,12 @@ def retrieveTopics(config, videoData, overwrite=False):
     printAndLog("Generating & saving Topic Model and Data...")
 
     topicModeller = getTopicsOverTime(config, videoData)
-    topicModeller.saveTopicModel()
+
+    try:
+        topicModeller.saveTopicModel()
+    except Exception as e:
+        printAndLog(f"Error saving Topic Model: {e}", level="error")
+        sys.exit(f"Error saving Topic Model: {e}")
 
     printAndLog(f"Topic Model and Data generated and saved for current configuration.")
     printAndLog(
@@ -270,6 +275,9 @@ def getTopicsOverTime(config, videoData):
 
     if fitSuccess and config.representationModelType == "langchain":
         config.topicTokenCount = cb.total_tokens
+        printAndLog(
+            f"Topic Extraction Token Count: {config.topicTokenCount}",
+        )
     else:
         printAndLog("Failed to fit the topic model. Exiting...", level="error")
         sys.exit("Failed to fit the topic model. Exiting...")
