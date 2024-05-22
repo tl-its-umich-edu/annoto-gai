@@ -77,7 +77,7 @@ class QuestionData:
             printAndLog(f"Topic: {topic}")
             printAndLog(f"Insert Point: {self.dominantTopics[topic]['End'].strftime('%H:%M:%S')}")
             question = f"Question: {parsedResponse['question']}"
-            answers = f"Answers: {'\n\t '.join(parsedResponse['answers'])}"
+            answers = "Answers: " + '\n\t'.join(parsedResponse['answers'])
             correct = f"Correct: {parsedResponse['correct']}"
             reason = f"Reason: {parsedResponse['reason']}"
             printAndLog('\n'.join([question, answers, correct, reason]))
