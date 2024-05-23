@@ -1,4 +1,4 @@
-from configData import Config
+from configData import configVars
 from transcriptLoader import TranscriptData
 from topicExtractor import retrieveTopics
 from questionGenerator import retrieveQuestions
@@ -6,7 +6,7 @@ from utils import printAndLog
 
 
 def main():
-    config = Config()
+    config = configVars()
     config.setFromEnv()
 
     printAndLog(f"Retrieving Transcript for {config.videoToUse}...")
@@ -17,7 +17,7 @@ def main():
     topicModeller.printTopics()
 
     printAndLog(f"Retrieving Questions for {config.videoToUse}...")
-    questionData = retrieveQuestions(config, videoData, topicModeller)
+    questionData = retrieveQuestions(config, topicModeller, videoData)
     questionData.printQuestions()
 
 if __name__ == "__main__":
