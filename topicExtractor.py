@@ -1,12 +1,13 @@
-from config import OpenAIBot, LangChainBot
 import sys
 import time
-from utils import dataLoader, dataSaver, printAndLog, getBinCount
-from bertopic import BERTopic
-from keybert import KeyBERT
 from sklearn.feature_extraction.text import CountVectorizer
 from langchain_community.callbacks import get_openai_callback
 import openai
+from bertopic import BERTopic
+from keybert import KeyBERT
+from configData import OpenAIBot, LangChainBot
+from utils import dataLoader, dataSaver, printAndLog, getBinCount
+from configData import representationModelType
 
 # This is to suppress the divide by zero warning from numpy.
 # This is only used during the CountVectorizer call in the vectorizerModel function.
@@ -19,87 +20,84 @@ seterr(divide="ignore")
 
 class TopicModeller:
     """
-    Class for topic modeling using BERTopic.
+    Class for performing topic modeling on video data.
 
     Args:
         config (object): Configuration object.
-        load (bool, optional): Whether to load a pre-trained topic model. Defaults to False.
-
-    Attributes:
-        config (object): Configuration object.
-        representationModel (object): Representation model for topic modeling.
-        topicModel (object): Topic model.
-        topicsOverTime (object): Topics over time.
-
-    Methods:
-        loadTopicModel(): Load a pre-trained topic model.
-        saveTopicModel(): Save the topic model.
-        initializeRepresentationModel(): Initialize the representation model.
-        initializeTopicModel(vectorizerModel=None): Initialize the topic model.
-        fitTopicModel(combinedTranscript): Fit the topic model.
-
+        videoData (object, optional): Video data object. Defaults to None.
     """
 
-    def __init__(self, config, load=False):
+    def __init__(self, config, videoData=None):
         self.config = config
+        self.videoData = videoData
+        self.OpenAIChatBot = None
+        self.LangChainQABot = None
         self.representationModel = None
         self.topicModel = None
         self.topicsOverTime = None
+        self.tokenCount = 0
+        self.callMaxLimit = 3
 
-        if self.config.callMaxLimit is not None:
-            self.callMaxLimit = self.config.callMaxLimit
-        else:
-            self.callMaxLimit = 5
+    def intialize(self, videoData):
+        """
+        Initialize the video data.
 
+        Args:
+            videoData (object): Video data object.
+        """
+        self.videoData = videoData
+
+    def makeTopicModel(self, load=True):
+        """
+        Create or load the topic model.
+
+        Args:
+            load (bool, optional): Whether to load a pre-trained topic model. Defaults to True.
+        """
         if load:
             self.loadTopicModel()
         else:
+            vectorizerModel = (
+                getVectorizer(self.videoData.combinedTranscript)
+                if self.config.useKeyBERT
+                else None
+            )
             self.initializeRepresentationModel()
+            self.initializeTopicModel(vectorizerModel)
+            self.getTopicsOverTime()
 
     def loadTopicModel(self):
         """
         Load a pre-trained topic model.
         """
-        self.topicModel = dataLoader(self.config, "topicModel", self.config.videoToUse)
-        self.topicsOverTime = dataLoader(
-            self.config, "topicsOverTime", self.config.videoToUse
-        )
+        self.topicModel = dataLoader(self.config, "topicModel")
+        self.topicsOverTime = dataLoader(self.config, "topicsOverTime")
 
     def saveTopicModel(self):
         """
-        Save the topic model.
+        Save the topic model and topics over time data.
         """
-        dataSaver(
-            self.topicModel,
-            self.config,
-            "topicModel",
-            self.config.videoToUse,
-        )
-        dataSaver(
-            self.topicsOverTime,
-            self.config,
-            "topicsOverTime",
-            self.config.videoToUse,
-        )
+        dataSaver(self.topicModel, self.config, "topicModel")
+        dataSaver(self.topicsOverTime, self.config, "topicsOverTime")
 
     def initializeRepresentationModel(self):
         """
         Initialize the representation model based on the configuration.
         """
-        if self.config.representationModelType == "simple":
+        if representationModelType == "simple":
             from bertopic.representation import KeyBERTInspired
 
             self.representationModel = KeyBERTInspired()
 
-        if self.config.representationModelType == "openai":
+        if representationModelType == "openai":
             from bertopic.representation import OpenAI
             import tiktoken
 
-            OpenAIChatBot = OpenAIBot(self.config)
-            tokenizer = tiktoken.encoding_for_model(OpenAIChatBot.model)
+            self.OpenAIChatBot = OpenAIBot(self.config)
+            tokenizer = tiktoken.encoding_for_model(self.OpenAIChatBot.model)
             self.representationModel = OpenAI(
-                OpenAIChatBot.client,
-                model=OpenAIChatBot.model,
+                self.OpenAIChatBot.client,
+                model=self.OpenAIChatBot.model,
                 delay_in_seconds=2,
                 chat=True,
                 nr_docs=8,
@@ -107,12 +105,12 @@ class TopicModeller:
                 tokenizer=tokenizer,
             )
 
-        if self.config.representationModelType == "langchain":
+        if representationModelType == "langchain":
             from bertopic.representation import LangChain
 
-            LangChainQABot = LangChainBot(self.config)
+            self.LangChainQABot = LangChainBot(self.config)
             self.representationModel = LangChain(
-                LangChainQABot.chain, prompt=LangChainQABot.prompt
+                self.LangChainQABot.chain, prompt=self.LangChainQABot.prompt
             )
 
     def initializeTopicModel(self, vectorizerModel=None):
@@ -130,30 +128,22 @@ class TopicModeller:
         else:
             self.topicModel = BERTopic(representation_model=self.representationModel)
 
-    def fitTopicModel(self, combinedTranscript):
+    def fitTopicModel(self):
         """
-        Fit the topic model.
-
-        Args:
-            combinedTranscript (object): Combined transcript object.
-
-        Returns:
-            bool: True if successful, False otherwise.
+        Fit the topic model to the video data.
         """
-        docs = combinedTranscript["Combined Lines"].tolist()
-        timestamps = combinedTranscript["Start"].tolist()
+        docs = self.videoData.combinedTranscript["Combined Lines"].tolist()
+        timestamps = self.videoData.combinedTranscript["Start"].tolist()
 
         callAttemptCount = 0
         while callAttemptCount < self.callMaxLimit:
             try:
-                # Link to the function: https://maartengr.github.io/BERTopic/api/bertopic.html#bertopic._bertopic.BERTopic.fit_transform
-                # Explanation of what BERTopic is: https://maartengr.github.io/BERTopic/algorithm/algorithm.html
-                # This a rather detailed explanation of the many steps going on within BERTopic, but covers all aspects of it.
                 topics, probs = self.topicModel.fit_transform(docs)
 
-                binCount = getBinCount(combinedTranscript, windowSize=120)
+                binCount = getBinCount(
+                    self.videoData.combinedTranscript, windowSize=120
+                )
 
-                # Link to the function: https://maartengr.github.io/BERTopic/api/bertopic.html#bertopic._bertopic.BERTopic.topics_over_time
                 self.topicsOverTime = self.topicModel.topics_over_time(
                     docs, timestamps, nr_bins=binCount
                 )
@@ -173,7 +163,7 @@ class TopicModeller:
                 time.sleep(60)
             except Exception as e:
                 printAndLog(f"Error Message: {e}")
-                printAndLog("Failed to complete fittinf operation on BERTopic.")
+                printAndLog("Failed to complete fitting operation on BERTopic.")
                 return False
             callAttemptCount += 1
 
@@ -183,14 +173,44 @@ class TopicModeller:
             )
             return False
 
+    def getTopicsOverTime(self):
+        """
+        Get the topics over time.
+        """
+        with get_openai_callback() as cb:
+            fitSuccess = self.fitTopicModel()
+
+        if not fitSuccess:
+            printAndLog("Failed to fit the topic model. Exiting...", level="error")
+            sys.exit("Failed to fit the topic model. Exiting...")
+
+        if representationModelType == "langchain":
+            self.tokenCount = cb.total_tokens
+
+        # This does not work for OpenAI as the token count is not available.
+        # Might remove this as we default to LangChain.
+        if representationModelType == "openai":
+            self.tokenCount = self.OpenAIChatBot.tokenUsage
+
+        printAndLog(
+            f"Topic Extraction Token Count: {self.tokenCount}",
+        )
+
     def printTopics(self):
         """
         Print the topics.
         """
-
         getAllTopics = self.topicModel.get_topics()
         topicList = {topicID: getAllTopics[topicID][0][0] for topicID in getAllTopics}
         printAndLog(topicList)
+
+    def printTokenCount(self):
+        """
+        Print the token count.
+        """
+        printAndLog(
+            f"Topic Modelling Token Count: {self.tokenCount}",
+        )
 
 
 # Using a manual overwrite option for debugging.
@@ -206,9 +226,9 @@ def retrieveTopics(config, videoData, overwrite=False):
     Returns:
         TopicModeller: The topic modeller object containing the generated topics and data.
     """
-
+    topicModeller = TopicModeller(config, videoData)
     if not config.overwriteTopicModel and not overwrite:
-        topicModeller = TopicModeller(config, load=True)
+        topicModeller.makeTopicModel(load=True)
         if (
             topicModeller.topicModel is not None
             and topicModeller.topicsOverTime is not None
@@ -222,13 +242,8 @@ def retrieveTopics(config, videoData, overwrite=False):
 
     printAndLog("Generating & saving Topic Model and Data...")
 
-    topicModeller = getTopicsOverTime(config, videoData)
-
-    try:
-        topicModeller.saveTopicModel()
-    except Exception as e:
-        printAndLog(f"Error saving Topic Model: {e}", level="error")
-        sys.exit(f"Error saving Topic Model: {e}")
+    topicModeller.makeTopicModel(load=False)
+    topicModeller.saveTopicModel()
 
     printAndLog(f"Topic Model and Data generated and saved for current configuration.")
     printAndLog(
@@ -258,28 +273,3 @@ def getVectorizer(combinedTranscript):
     # Basic explanation of Count Vectorizer: https://towardsdatascience.com/basics-of-countvectorizer-e26677900f9c
     vectorizer_model = CountVectorizer(vocabulary=vocabulary)
     return vectorizer_model
-
-
-def getTopicsOverTime(config, videoData):
-    topicModeller = TopicModeller(config)
-
-    vectorizerModel = (
-        getVectorizer(videoData.combinedTranscript) if config.useKeyBERT else None
-    )
-    topicModeller.initializeTopicModel(vectorizerModel)
-
-    # This context manager allows for tracking token usage in the LangChain calls made by BERTopic.
-    # THe implementation is a little janky still, and I will need to see how to improve on it.
-    with get_openai_callback() as cb:
-        fitSuccess = topicModeller.fitTopicModel(videoData.combinedTranscript)
-
-    if fitSuccess and config.representationModelType == "langchain":
-        config.topicTokenCount = cb.total_tokens
-        printAndLog(
-            f"Topic Extraction Token Count: {config.topicTokenCount}",
-        )
-    else:
-        printAndLog("Failed to fit the topic model. Exiting...", level="error")
-        sys.exit("Failed to fit the topic model. Exiting...")
-
-    return topicModeller

@@ -1,4 +1,4 @@
-from config import Config
+from configData import Config
 from transcriptLoader import TranscriptData
 from topicExtractor import retrieveTopics
 from questionGenerator import retrieveQuestions

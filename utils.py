@@ -1,11 +1,11 @@
 import os
 import pickle
-
-from bertopic import BERTopic
 import logging
+from bertopic import BERTopic
+from configData import representationModelType, saveFolder
 
 
-def dataSaver(data, config, dataType, videoToUse, saveNameAppend=""):
+def dataSaver(data, config, dataType, saveNameAppend=""):
     """
     Save the data based on the specified configuration.
 
@@ -13,7 +13,6 @@ def dataSaver(data, config, dataType, videoToUse, saveNameAppend=""):
         data: The data to be saved.
         config: The configuration object.
         dataType: The type of data being saved.
-        videoToUse: The video identifier.
         saveNameAppend: An optional string to append to the save name.
 
     Returns:
@@ -21,23 +20,30 @@ def dataSaver(data, config, dataType, videoToUse, saveNameAppend=""):
     """
     if config.useKeyBERT:
         saveNameAppend = f"_KeyBERT{saveNameAppend}"
-    saveName = f"{videoToUse}_{config.representationModelType}{saveNameAppend}"
-    savePath = os.path.join(config.saveFolder, dataType, saveName)
+    saveName = f"{config.videoToUse}_{representationModelType}{saveNameAppend}"
+    savePath = os.path.join(saveFolder, dataType, saveName)
 
-    if dataType == "topicModel":
-        data.save(
-            savePath,
-            serialization="safetensors",
-            save_ctfidf=True,
-            save_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+    try:
+        if dataType == "topicModel":
+            data.save(
+                savePath,
+                serialization="safetensors",
+                save_ctfidf=True,
+                save_embedding_model="sentence-transformers/all-MiniLM-L6-v2",
+            )
+        else:
+            pickle.dump(data, open(savePath + ".p", "wb"))
+        return True
+        
+    except Exception as e:
+        printAndLog(
+            f"Error saving {dataType} for {config.videoToUse}: {e}. Data will need to be reloaded next run.",
+            level="warn",
         )
-    else:
-        pickle.dump(data, open(savePath + ".p", "wb"))
-
-    return savePath
+        return False
 
 
-def dataLoader(config, dataType, videoToUse, saveNameAppend=""):
+def dataLoader(config, dataType, saveNameAppend=""):
     """
     Load data based on the specified configuration, data type, video to use, and save name appendix.
 
@@ -55,15 +61,19 @@ def dataLoader(config, dataType, videoToUse, saveNameAppend=""):
     if dataType in ["topicsOverTime", "questionData"]:
         saveNameAppend = f"{saveNameAppend}.p"
 
-    saveName = f"{videoToUse}_{config.representationModelType}{saveNameAppend}"
-    savePath = os.path.join(config.saveFolder, dataType, saveName)
+    saveName = f"{config.videoToUse}_{representationModelType}{saveNameAppend}"
+    savePath = os.path.join(saveFolder, dataType, saveName)
 
-    if os.path.exists(savePath):
-        if dataType == "topicModel":
-            return BERTopic.load(savePath)
-
-        return pickle.load(open(savePath, "rb"))
-
+    try:
+        if os.path.exists(savePath):
+            if dataType == "topicModel":
+                return BERTopic.load(savePath)
+            return pickle.load(open(savePath, "rb"))
+    except Exception as e:
+        printAndLog(
+            f"Error loading {dataType} for {config.videoToUse}: {e}. Data will need to be reloaded.",
+            level="warn",
+        )
     return None
 
 

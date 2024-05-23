@@ -1,9 +1,11 @@
 import glob
 import os
-from datetime import datetime
-import pandas as pd
-from utils import printAndLog
 import sys
+import pandas as pd
+from datetime import datetime
+from configData import captionsFolder
+from utils import printAndLog
+
 
 
 class TranscriptData:
@@ -28,7 +30,6 @@ class TranscriptData:
 
     def __init__(self, config):
         self.config = config
-        self.videoToUse = self.config.videoToUse
 
         self.srtFiles = self.validateVideoFiles()
         self.transcript = self.processSrtFiles()
@@ -44,21 +45,26 @@ class TranscriptData:
         Raises:
             SystemExit: If video folder or SRT files are not found.
         """
+        if not os.path.exists(captionsFolder):
+            os.makedirs(captionsFolder)
+            printAndLog(f"Captions folder not found. Created folder: {captionsFolder}.", level="error")
+            sys.exit("Captions folder not found. Exiting...")
+
         if not os.path.exists(
-            os.path.join(self.config.captionsFolder, self.videoToUse)
+            os.path.join(captionsFolder, self.config.videoToUse)
         ):
             printAndLog(
-                f"Video folder not found for {self.config.videoToUse} in Caption folder {self.config.captionsFolder}.",
+                f"Video folder not found for {self.config.videoToUse} in Caption folder {captionsFolder}.",
                 level="error",
             )
             sys.exit("Captions folder not found. Exiting...")
 
         srtFiles = glob.glob(
-            os.path.join(self.config.captionsFolder, self.config.videoToUse, "*.srt")
+            os.path.join(captionsFolder, self.config.videoToUse, "*.srt")
         )
         if len(srtFiles) == 0:
             printAndLog(
-                f"No SRT files found in {self.config.captionsFolder}/{self.config.videoToUse}.",
+                f"No SRT files found in {captionsFolder}/{self.config.videoToUse}.",
                 level="error",
             )
             sys.exit("No SRT files found. Exiting...")

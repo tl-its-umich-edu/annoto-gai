@@ -1,62 +1,108 @@
-import pandas as pd
-from utils import dataLoader, dataSaver, printAndLog
-from config import OpenAIBot
 import json
 import sys
+import pandas as pd
+from utils import dataLoader, dataSaver, printAndLog
+from configData import OpenAIBot
 
 
 class QuestionData:
     """
-    Represents a class that handles question data generation.
+    Represents a class for managing question data.
 
-    Args:
-        config (Config): The configuration object.
-        videoData (VideoData): The video data object.
-        topicModeller (TopicModeller): The topic modeller object.
-        load (bool, optional): Whether to load existing question data. Defaults to True.
+    Attributes:
+        config (str): The configuration for the question data.
+        videoData (object): The video data object.
+        topicModeller (object): The topic modeller object.
+        clusteredTopics (list): The clustered topics.
+        dominantTopics (dict): The dominant topics.
+        relevantText (str): The relevant text.
+        questionQueryText (dict): The question query text.
+        responseData (dict): The response data.
+        tokenCount (int): The token count.
+
+    Methods:
+        __init__(self, config, load=True): Initializes the QuestionData object.
+        initializeQuestionData(self, topicModeller, videoData=None): Initializes the question data.
+        makeQuestionData(self, load=True): Makes the question data.
+        loadQuestionData(self): Loads the question data from a file.
+        saveQuestionData(self): Saves the question data to a file.
+        getQuestionDataFromResponse(self): Generates the question data using the OpenAI chatbot.
+        printQuestions(self): Prints the question data.
     """
 
-    def __init__(self, config, videoData, topicModeller, load=True):
-        self.config = config
+    def __init__(self, config, load=True):
+        """
+        Initializes the QuestionData object.
 
-        self.clusteredTopics = getClusteredTopics(videoData, topicModeller)
+        Args:
+            config (str): The configuration for the question data.
+            load (bool, optional): Whether to load the question data. Defaults to True.
+        """
+        self.config = config
+        self.videoData = None
+        self.topicModeller = None
+
+        self.clusteredTopics = None
+        self.dominantTopics = None
+        self.relevantText = None
+
+        self.questionQueryText = None
+        self.responseData = None
+        self.tokenCount = 0
+
+    def initialize(self, topicModeller, videoData=None):
+        """
+        Initializes the question data.
+
+        Args:
+            topicModeller (object): The topic modeller object.
+            videoData (object, optional): The video data object. Defaults to None.
+        """
+        # videoData is optional here because we can use the videoData from the topicModeller if it is not provided.
+        if videoData is not None:
+            self.videoData = videoData
+        else:
+            self.videoData = topicModeller.videoData
+
+        self.clusteredTopics = getClusteredTopics(topicModeller, videoData)
         self.dominantTopics = getDominantTopic(self.clusteredTopics)
         self.relevantText, self.questionQueryText = getTextAndQuestion(
             self.dominantTopics, videoData
         )
-        self.responseData = None
 
+    def makeQuestionData(self, load=True):
+        """
+        Makes the question data.
+
+        Args:
+            load (bool, optional): Whether to load the question data. Defaults to True.
+        """
         if load:
             self.loadQuestionData()
         else:
             self.OpenAIChatBot = OpenAIBot(self.config)
-            self.getQuestionData()
-            config.questionTokenCount = self.OpenAIChatBot.tokenUsage
+            self.getQuestionDataFromResponse()
+
+            self.tokenCount = self.OpenAIChatBot.tokenUsage
             printAndLog(
-                f"Question Generation Token Count: {config.questionTokenCount}",
+                f"Question Generation Token Count: {self.tokenCount}",
             )
+
             self.saveQuestionData()
 
     def loadQuestionData(self):
         """
         Loads the question data from a file.
         """
-        self.responseData = dataLoader(
-            self.config, "questionData", self.config.videoToUse
-        )
+        self.responseData = dataLoader(self.config, "questionData")
 
     def saveQuestionData(self):
         """
         Saves the question data to a file.
         """
-        dataSaver(
-            self.responseData,
-            self.config,
-            "questionData",
-            self.config.videoToUse,
-        )
+        dataSaver(self.responseData, self.config, "questionData")
 
-    def getQuestionData(self):
+    def getQuestionDataFromResponse(self):
         """
         Generates the question data using the OpenAI chatbot.
 
@@ -87,7 +133,13 @@ class QuestionData:
             response = response.strip("` \n")
             if response.startswith("json"):
                 response = response[4:]
-            parsedResponse = json.loads(response)
+
+            try:
+                parsedResponse = json.loads(response)                
+            except json.JSONDecodeError as e:
+                printAndLog(f"Error decoding JSON: {e} for received response: {parsedResponse}", level="warn")
+                printAndLog(f"Question for topic: {topic} not generated.", level="warn")
+                continue
 
             printAndLog(f"Topic: {topic}")
             printAndLog(
@@ -100,23 +152,34 @@ class QuestionData:
             printAndLog("\n".join([question, answers, correct, reason]))
             printAndLog("------------------------------------")
 
+    def printTokenCount(self):
+        """
+        Prints the token count.
+        """
+        printAndLog(
+            f"Question Generation Token Count: {self.tokenCount}",
+        )
+
 
 # Using a manual overwrite option for debugging.
-def retrieveQuestions(config, videoData, topicModeller, overwrite=False):
+def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
     """
-    Retrieves or generates question data based on the given configuration, video data, and topic modeller.
+    Retrieves or generates question data based on the given configuration and topic modeller.
 
     Args:
-        config (Config): The configuration object.
-        videoData (VideoData): The video data object.
-        topicModeller (TopicModeller): The topic modeller object.
+        config (Config): The configuration object containing the settings for question generation.
+        topicModeller (TopicModeller): The topic modeller object used for topic modeling.
+        videoData (VideoData, optional): The video data object containing information about the video. Defaults to None.
         overwrite (bool, optional): Whether to overwrite existing question data. Defaults to False.
 
     Returns:
-        QuestionData: The question data object.
+        QuestionData: The question data object containing the generated or retrieved question data.
     """
+    questionData = QuestionData(config)
+    questionData.initialize(topicModeller, videoData)
+
     if not config.overwriteQuestionData and not overwrite:
-        questionData = QuestionData(config, videoData, topicModeller, load=True)
+        questionData.makeQuestionData(load=True)
 
         if questionData.responseData is not None:
             printAndLog("Question Data loaded from saved files.")
@@ -128,7 +191,7 @@ def retrieveQuestions(config, videoData, topicModeller, overwrite=False):
 
     printAndLog("Generating Question Data...", logOnly=True)
 
-    questionData = QuestionData(config, videoData, topicModeller, load=False)
+    questionData.makeQuestionData(load=False)
     questionData.saveQuestionData()
 
     printAndLog("Question Data generated and saved for current configuration.")
@@ -139,7 +202,7 @@ def retrieveQuestions(config, videoData, topicModeller, overwrite=False):
     return questionData
 
 
-def getClusteredTopics(videoData, topicModeller):
+def getClusteredTopics(topicModeller, videoData=None):
     """
     Get clustered topics from videoData using topicModeller.
 
@@ -158,6 +221,9 @@ def getClusteredTopics(videoData, topicModeller):
             - Topic Title: The title of the topic.
 
     """
+    if videoData is None:
+        videoData = topicModeller.videoData
+
     # Sort the topic by timsetamp and frequency.
     sortedTopics = topicModeller.topicsOverTime.sort_values(
         ["Timestamp", "Frequency"], ascending=False
@@ -181,37 +247,45 @@ def getClusteredTopics(videoData, topicModeller):
     # We also filter out any topics that are not relevant in other segments.
     filteredTopics = filteredGroupsDF[filteredGroupsDF["Topic"] != -1]
 
-    # We can merge any segments where the main topic is the same.
-    # This gives the inutition that the same topic is being discussed over a period of time.
-    clusteredTopics = (
-        filteredTopics.groupby(
-            (filteredTopics["Topic"] != filteredTopics["Topic"].shift()).cumsum()
-        )
-        .agg(
-            {
-                "Topic": "first",
-                "Words": lambda words: ", ".join(words),
-                "Frequency": "sum",
-                "Timestamp": "first",
-            }
-        )
-        .reset_index(drop=True)
-    )
 
-    # We set the start and end times for each topic segment.
-    # As segments are linear, the start time is the timestamp of the first topic in the segment, and the end time is the timestamp of the next topic in the segment.
-    # This tracks if multiple topics are covered in a single segment.
-    clusteredTopics["Start"] = clusteredTopics["Timestamp"]
-    clusteredTopics.at[clusteredTopics.index[0], "Start"] = (
-        videoData.combinedTranscript["Start"].iloc[0]
-    )
+    try:
 
-    endTimestamps = list(clusteredTopics["Timestamp"].unique()) + [
-        videoData.combinedTranscript["End"].iloc[-1]
-    ]
-    clusteredTopics["End"] = clusteredTopics["Timestamp"].apply(
-        lambda timestamp: endTimestamps[endTimestamps.index(timestamp) + 1]
-    )
+        # We can merge any segments where the main topic is the same.
+        # This gives the intuition that the same topic is being discussed over a period of time.
+        clusteredTopics = (
+            filteredTopics.groupby(
+                (filteredTopics["Topic"] != filteredTopics["Topic"].shift()).cumsum()
+            )
+            .agg(
+                {
+                    "Topic": "first",
+                    "Words": lambda words: ", ".join(words),
+                    "Frequency": "sum",
+                    "Timestamp": "first",
+                }
+            )
+            .reset_index(drop=True)
+        )
+
+        # We set the start and end times for each topic segment.
+        # As segments are linear, the start time is the timestamp of the first topic in the segment, and the end time is the timestamp of the next topic in the segment.
+        # This tracks if multiple topics are covered in a single segment.
+        clusteredTopics["Start"] = clusteredTopics["Timestamp"]
+        clusteredTopics.at[clusteredTopics.index[0], "Start"] = (
+            videoData.combinedTranscript["Start"].iloc[0]
+        )
+
+        endTimestamps = list(clusteredTopics["Timestamp"].unique()) + [
+            videoData.combinedTranscript["End"].iloc[-1]
+        ]
+        clusteredTopics["End"] = clusteredTopics["Timestamp"].apply(
+            lambda timestamp: endTimestamps[endTimestamps.index(timestamp) + 1]
+        )
+
+    except Exception as e:
+        printAndLog(f"Error clustering topics: {e}", level="error")
+        printAndLog(f"Clustering error on Video: {videoData.config.videoToUse}", logOnly=True)
+        sys.exit(f"Error clustering topics: {e}")
 
     # We add the topic title for clarity in the final DataFrame.
     clusteredTopics["Topic Title"] = clusteredTopics["Topic"].apply(
