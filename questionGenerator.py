@@ -380,12 +380,12 @@ def getTextAndQuestion(dominantTopics, videoData):
             f"Time range for relevant text for Topic - {topic}: {dominantTopics[topic]['Start'].strftime('%H:%M:%S')} to {dominantTopics[topic]['End'].strftime('%H:%M:%S')}",
             logOnly=True,
         )
+        # printAndLog(
+        #     f"Relevant text selected for Topic - {topic}: {relevantText[topic]}",
+        #     logOnly=True,
+        # )
         printAndLog(
-            f"Relevant text selected for Topic - {topic}: {relevantText[topic]}",
-            logOnly=True,
-        )
-        printAndLog(
-            f"Query to generate question for Topic - {topic}: {questionQueryText[topic]}",
+            f"Query to generate question for Topic - {topic} - First 100 Characters: {questionQueryText[topic][:100]}",
             logOnly=True,
         )
 
