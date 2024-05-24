@@ -14,15 +14,14 @@ saveFolder: str = "savedData"
 fileTypes = ["topicModel", "topicsOverTime", "questionData"]
 representationModelType: str = "langchain"
 
-def main():
-    # Make folders to save data in
-    for folder in fileTypes:
-        folderPath = os.path.join(saveFolder, folder)
+for folder in fileTypes:
+    folderPath = os.path.join(saveFolder, folder)
+    try:
         if not os.path.exists(folderPath):
             os.makedirs(folderPath)
-
-if __name__ == "__main__":
-    main()
+    except OSError:
+        logging.error(f"Creation of the directory {folderPath} failed.")
+        sys.exit(f"Creation of the directory {folderPath} failed. Exiting..")
 
 class configVars:
     def __init__(self):
