@@ -50,7 +50,6 @@ def dataLoader(config, dataType, saveNameAppend=""):
     Parameters:
     - config: The configuration object.
     - dataType: The type of data to load.
-    - videoToUse: The video to use for loading the data.
     - saveNameAppend: An optional appendix to add to the save name.
 
     Returns:
@@ -89,7 +88,7 @@ def printAndLog(message, level="info", logOnly=False):
         logging.info(message)
     elif level == "debug":
         logging.debug(message)
-    elif level == "warning":
+    elif level == "warning" or level == "warn":
         logging.warning(message)
     elif level == "error":
         logging.error(message)
