@@ -6,13 +6,6 @@ import pandas as pd
 from datetime import datetime
 from configData import captionsFolder
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-    level=logging.INFO,
-)
-
-
 class TranscriptData:
     """
     Class to handle transcript data.

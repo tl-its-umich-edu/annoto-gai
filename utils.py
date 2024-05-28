@@ -4,13 +4,6 @@ import logging
 from bertopic import BERTopic
 from configData import representationModelType, saveFolder
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-    level=logging.INFO,
-)
-
-
 def dataSaver(data, config, dataType, saveNameAppend=""):
     """
     Save the data based on the specified configuration.

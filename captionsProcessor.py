@@ -4,12 +4,7 @@ from topicExtractor import retrieveTopics
 from questionGenerator import retrieveQuestions
 import logging
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-    level=logging.INFO,
-)
-
+logger = logging.getLogger(__name__)
 
 def main():
     config = configVars()

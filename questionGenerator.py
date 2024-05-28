@@ -5,13 +5,6 @@ import pandas as pd
 from utils import dataLoader, dataSaver
 from configData import OpenAIBot
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-    level=logging.INFO,
-)
-
-
 class QuestionData:
     """
     Represents a class for managing question data.

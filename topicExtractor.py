@@ -18,13 +18,6 @@ from numpy import seterr
 
 seterr(divide="ignore")
 
-logging.basicConfig(
-    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-    level=logging.INFO,
-)
-
-
 class TopicModeller:
     """
     Class for performing topic modeling on video data.
