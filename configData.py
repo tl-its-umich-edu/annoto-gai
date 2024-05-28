@@ -9,11 +9,21 @@ from openai import AzureOpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
-class Config:
-    """
-    Configuration class for managing various parameters and settings.
-    """
+captionsFolder: str = "Captions"
+saveFolder: str = "savedData"
+fileTypes = ["topicModel", "topicsOverTime", "questionData"]
+representationModelType: str = "langchain"
 
+for folder in fileTypes:
+    folderPath = os.path.join(saveFolder, folder)
+    try:
+        if not os.path.exists(folderPath):
+            os.makedirs(folderPath)
+    except OSError:
+        logging.error(f"Creation of the directory {folderPath} failed.")
+        sys.exit(f"Creation of the directory {folderPath} failed. Exiting..")
+
+class configVars:
     def __init__(self):
         self.logLevel = logging.INFO
 
@@ -25,38 +35,20 @@ class Config:
             "ORGANIZATION": "",
         }
 
-        self.captionsFolder: str = "Captions"
-        if not os.path.exists(self.captionsFolder):
-            os.makedirs(self.captionsFolder)
-
         self.videoToUse: str = ""
-        self.windowSize: int = 20
-
-        self.saveFolder: str = "savedData"
-        self.fileTypes = ["topicModel", "topicsOverTime"]
-
-        for folder in self.fileTypes:
-            folderPath = os.path.join(self.saveFolder, folder)
-            if not os.path.exists(folderPath):
-                os.makedirs(folderPath)
+        self.windowSize: int = 30
 
         self.overwriteTopicModel: bool = False
-        self.representationModelType: str = "langchain"
+        self.overwriteQuestionData: bool = False
+
         self.useKeyBERT: bool = True
 
         self.langchainPrompt: str = (
             "Give a single label that is only a few words long to summarize what these documents are about."
         )
-
-        # Not currently used
         self.questionPrompt: str = (
             "You are a question-generating bot that generates questions for a given topic based on the provided relevant trancription text from a video."
         )
-
-        self.topicTokenCount: int = 0
-        self.questionTokenCount: int = 0
-
-        self.callMaxLimit: int = 5
 
     def set(self, name, value):
         """
@@ -179,6 +171,16 @@ class Config:
             False if type(self.overwriteTopicModel) is not bool else True
         )
 
+        self.overwriteQuestionData = self.configFetch(
+            "OVERWRITE_EXISTING_QUESTIONS",
+            self.overwriteQuestionData,
+            bool,
+            None,
+        )
+        envImportSuccess[self.overwriteQuestionData] = (
+            False if type(self.overwriteQuestionData) is not bool else True
+        )
+
         self.useKeyBERT = self.configFetch(
             "USE_KEY_BERT",
             self.useKeyBERT,
@@ -211,9 +213,14 @@ class Config:
 
         if False in envImportSuccess.values():
             sys.exit("Exiting due to configuration parameter import problems.")
-        else:
-            logging.info("All configuration parameters set up successfully.")
 
+        if self.overwriteTopicModel == True:
+            self.overwriteQuestionData = True
+            logging.info(
+                "Generated Question data will also be overwritten as Topic Model data is being overwritten."
+            )
+
+        logging.info("All configuration parameters set up successfully.")
 
 class OpenAIBot:
     """
@@ -252,11 +259,7 @@ class OpenAIBot:
             organization=self.config.openAIParams["ORGANIZATION"],
         )
         self.tokenUsage = 0
-
-        if self.config.callMaxLimit is not None:
-            self.callMaxLimit = self.config.callMaxLimit
-        else:
-            self.callMaxLimit = 5
+        self.callMaxLimit = 3
 
     def getResponse(self, prompt):
         """
