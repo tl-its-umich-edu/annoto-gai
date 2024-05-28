@@ -37,7 +37,7 @@ In a future implementation, the need for the model being saved itself could be r
 #### Scripts used:
 Currently, 5 scripts are used:
 1. `configData.py`: Contains the `configVars` class used to store environmental variables, as well as two other classes for OpenAI and LangChain API usage.
-2. `utils.py`: Contains common functions used to save and load data, and print and log messages.
+2. `utils.py`: Contains common functions used to save and load data.
 3. `transcriptLoader.py`: Contains the `TranscriptData` class that handles transcript file loading and initital processing.
 4. `topicExtractor.py`: Contains the `TopicModeller` class and functions to handle topic extraction from the processed transcript data.
 5. `questionGenerator.py`: Contains the `QuestionData` class and functions to handle and store question generation from the transcript data and extracted topics.
