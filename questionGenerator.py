@@ -145,12 +145,12 @@ class QuestionData:
             printAndLog(
                 f"Insert Point: {self.dominantTopics[topic]['End'].strftime('%H:%M:%S')}"
             )
-            question = f"Question: {parsedResponse['question']}"
+            question = f"Question: {parsedResponse['question'][100]+'...'}"
             answers = "Answers: " + "\n\t".join(parsedResponse["answers"])
             correct = f"Correct: {parsedResponse['correct']}"
-            reason = f"Reason: {parsedResponse['reason']}"
+            reason = f"Reason: {parsedResponse['reason'][100]+'...'}"
             printAndLog("\n".join([question, answers, correct, reason]))
-            printAndLog("------------------------------------")
+            print("------------------------------------")
 
     def printTokenCount(self):
         """
