@@ -9,6 +9,12 @@ from openai import AzureOpenAI
 from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S%z',
+    level=logging.INFO
+)
+
 captionsFolder: str = "Captions"
 saveFolder: str = "savedData"
 fileTypes = ["topicModel", "topicsOverTime", "questionData"]
