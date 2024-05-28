@@ -5,8 +5,7 @@ import logging
 import pandas as pd
 from datetime import datetime
 from configData import captionsFolder
-from utils import dataLoader, dataSaver, printAndLog
-
+from utils import dataLoader, dataSaver
 
 
 class TranscriptData:
@@ -57,12 +56,15 @@ class TranscriptData:
         """
         Loads the transcript data from the data loader.
         """
+        loadedData = dataLoader(self.config, "transcriptData")
+        if loadedData is None:
+            loadedData = (None, None, None, None)
         (
             self.srtFiles,
             self.transcript,
             self.processedSentences,
             self.combinedTranscript,
-        ) = dataLoader(self.config, "transcriptData")
+        ) = loadedData
 
     def saveTranscriptData(self):
         """
@@ -114,8 +116,10 @@ class TranscriptData:
         """
         Prints the shape and head of the processed transcript data.
         """
-        printAndLog(f"Processed transcript data shape: {self.combinedTranscript.shape}")
-        printAndLog(
+        logging.info(
+            f"Processed transcript data shape: {self.combinedTranscript.shape}"
+        )
+        logging.info(
             f"Processed transcript data head: {self.combinedTranscript.head(5)}"
         )
 
@@ -135,7 +139,7 @@ def processSrtFiles(srtFiles):
 
     """
     if len(srtFiles) > 1:
-        printAndLog(
+        logging.info(
             f"Multiple SRT files found. Using the first one: {srtFiles[0]}",
             LogOnly=True,
         )
@@ -167,18 +171,15 @@ def processSrtFiles(srtFiles):
             )
             sentence = ""
 
-        transcriptDF = pd.DataFrame(transcript)
-        logging.info(f"Transcript data extracted from {self.srtFiles[0]}")
-        logging.info(f"Transcript data shape: {transcriptDF.shape}")
-        logging.info(f"Transcript data head: {transcriptDF.head(5)}")
+    transcriptDF = pd.DataFrame(transcript)
 
-        if transcriptDF.shape[0] == 0:
-            logging.error(f"No transcript data found in {self.srtFiles[0]}. Exiting...")
-            sys.exit("No transcript data found. Exiting...")
+    if transcriptDF.shape[0] == 0:
+        logging.error(f"No transcript data found in {srtFiles[0]}. Exiting...")
+        sys.exit("No transcript data found. Exiting...")
 
-    printAndLog(f"Transcript data extracted from {srtFiles[0]}", logOnly=True)
-    printAndLog(f"Transcript data shape: {transcriptDF.shape}", logOnly=True)
-    printAndLog(f"Transcript data head: {transcriptDF.head(5)}", logOnly=True)
+    logging.info(f"Transcript data extracted from {srtFiles[0]}")
+    logging.info(f"Transcript data shape: {transcriptDF.shape}")
+    logging.info(f"Transcript data head: {transcriptDF.head(5)}")
 
     return transcriptDF
 
@@ -197,7 +198,7 @@ def getCombinedTranscripts(transcript, windowSize=30):
     """
     transcript = transcript.sort_values(by="Start")
 
-    combinedTranscript = []
+    combinedTranscriptList = []
     currStart = transcript.iloc[0]["Start"]
     duration = pd.Timedelta(seconds=windowSize)
 
@@ -212,7 +213,7 @@ def getCombinedTranscripts(transcript, windowSize=30):
             continue
 
         combinedLines = " ".join(slicedTranscript["Line"].tolist())
-        combinedTranscript.append(
+        combinedTranscriptList.append(
             {
                 "Combined Lines": combinedLines,
                 "Start": slicedTranscript.iloc[0]["Start"],
@@ -223,11 +224,11 @@ def getCombinedTranscripts(transcript, windowSize=30):
         currStart = slicedTranscript.iloc[-1]["End"]
         duration = pd.Timedelta(seconds=windowSize)
 
-        combinedTranscript = pd.DataFrame(combinedTranscript)
-        logging.info(
-            f"Combined Transcript data shape: {combinedTranscript.shape}",
-        )
-        logging.info(f"Combined Transcript data head: {combinedTranscript.head(5)}")
+    combinedTranscript = pd.DataFrame(combinedTranscriptList)
+    logging.info(
+        f"Combined Transcript data shape: {combinedTranscript.shape}",
+    )
+    logging.info(f"Combined Transcript data head: {combinedTranscript.head(5)}")
 
     return combinedTranscript
 
@@ -238,14 +239,13 @@ def retrieveTranscript(config, overwrite=False):
     if not config.overwriteTranscriptData and not overwrite:
         transcriptData.makeTranscriptData(load=True)
         if transcriptData.combinedTranscript is not None:
-            printAndLog("Transcript Data loaded from saved files.")
-            printAndLog(
-                f"Transcript Data Head: {transcriptData.combinedTranscript.head(5)}",
-                logOnly=True,
+            logging.info("Transcript Data loaded from saved files.")
+            logging.info(
+                f"Transcript Data Head: {transcriptData.combinedTranscript.head(5)}"
             )
             return transcriptData
 
-    printAndLog("Generating & saving Transcript Data...")
+    logging.info("Generating & saving Transcript Data...")
     transcriptData.makeTranscriptData(load=False)
     dataSaver(
         transcriptData,

@@ -11,7 +11,8 @@ def main():
     config.setFromEnv()
 
     logging.info(f"Retrieving Transcript for {config.videoToUse}...")
-    videoData = TranscriptData(config)
+    videoData = retrieveTranscript(config)
+    videoData.printTranscript()
 
     logging.info(f"Retrieving Topics for {config.videoToUse}...")
     topicModeller = retrieveTopics(config, videoData)
