@@ -4,7 +4,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 from configData import captionsFolder
-from utils import printAndLog
+from utils import dataLoader, dataSaver, printAndLog
 
 
 
@@ -12,49 +12,82 @@ class TranscriptData:
     """
     Class to handle transcript data.
 
-    Args:
-        config (object): Configuration object.
-
     Attributes:
         config (object): Configuration object.
-        videoToUse (str): Name of the video to use.
-        srtFiles (list): List of validated SRT files.
-        transcript (DataFrame): Processed transcript data.
-        combinedTranscript (DataFrame): Combined transcript data.
-
-    Methods:
-        validateVideoFiles: Validates the video files.
-        processSrtFiles: Processes the SRT files and extracts transcript data.
-        getCombinedTranscripts: Combines the transcript data based on a window size.
+        srtFiles (list): List of SRT files.
+        transcript (object): Processed transcript data.
+        processedSentences (object): Processed sentences.
+        combinedTranscript (object): Combined transcript data.
     """
 
     def __init__(self, config):
         self.config = config
+        self.srtFiles = None
+        self.transcript = None
+        self.processedSentences = None
+        self.combinedTranscript = None
 
-        self.srtFiles = self.validateVideoFiles()
-        self.transcript = self.processSrtFiles()
-        self.combinedTranscript = self.getCombinedTranscripts()
+    def initialize(self, config):
+        """
+        Initializes the TranscriptData object with the given configuration.
+
+        Args:
+            config (object): Configuration object.
+        """
+        self.config = config
+
+    def makeTranscriptData(self, load=True):
+        """
+        Generates the transcript data.
+
+        Args:
+            load (bool, optional): Whether to load existing transcript data. Defaults to True.
+        """
+        if load:
+            self.loadTranscriptData()
+        else:
+            self.srtFiles = self.validateVideoFiles()
+            self.transcript = processSrtFiles(self.srtFiles)
+            self.combinedTranscript = getCombinedTranscripts(
+                self.transcript, self.config.windowSize
+            )
+
+    def loadTranscriptData(self):
+        """
+        Loads the transcript data from the data loader.
+        """
+        (
+            self.srtFiles,
+            self.transcript,
+            self.processedSentences,
+            self.combinedTranscript,
+        ) = dataLoader(self.config, "transcriptData")
+
+    def saveTranscriptData(self):
+        """
+        Saves the transcript data using the data saver.
+        """
+        dataSaver(
+            (
+                self.srtFiles,
+                self.transcript,
+                self.processedSentences,
+                self.combinedTranscript,
+            ),
+            self.config,
+            "transcriptData",
+        )
 
     def validateVideoFiles(self):
         """
-        Validates the video files.
+        Validates the existence of video files and SRT files.
 
         Returns:
             list: List of validated SRT files.
-
-        Raises:
-            SystemExit: If video folder or SRT files are not found.
         """
-        if not os.path.exists(captionsFolder):
-            os.makedirs(captionsFolder)
-            printAndLog(f"Captions folder not found. Created folder: {captionsFolder}.", level="error")
-            sys.exit("Captions folder not found. Exiting...")
-
-        if not os.path.exists(
-            os.path.join(captionsFolder, self.config.videoToUse)
-        ):
+        if not os.path.exists(os.path.join(captionsFolder, self.config.videoToUse)):
             printAndLog(
-                f"Video folder not found for {self.config.videoToUse} in Caption folder {captionsFolder}.",
+                f"Video folder not found for {self.config.videoToUse} in Caption folder {self.config.static.captionsFolder}.",
                 level="error",
             )
             sys.exit("Captions folder not found. Exiting...")
@@ -71,102 +104,158 @@ class TranscriptData:
 
         return srtFiles
 
-    def processSrtFiles(self):
+    def printTranscript(self):
         """
-        Processes the SRT files and extracts transcript data.
-
-        Returns:
-            DataFrame: Processed transcript data.
+        Prints the shape and head of the processed transcript data.
         """
-        if len(self.srtFiles) > 1:
-            printAndLog(
-                f"Multiple SRT files found. Using the first one: {self.srtFiles[0]}",
-                LogOnly=True,
-            )
-
-        with open(self.srtFiles[0], "r") as f:
-            lines = f.readlines()
-
-        transcript = []
-
-        timeFormat = "%H:%M:%S,%f"
-        arrow = "-->"
-
-        sentence = ""
-        startTime, endTime = "", ""
-
-        for line in lines:
-            line = line.strip()
-            if line.isdigit():
-                continue
-            elif arrow in line:
-                startTime, endTime = line.split(arrow)
-                startTime = datetime.strptime(startTime.strip(), timeFormat)  # .time()
-                endTime = datetime.strptime(endTime.strip(), timeFormat)  # .time()
-            elif line:
-                sentence += " " + line
-            else:
-                transcript.append(
-                    {"Line": sentence.strip(), "Start": startTime, "End": endTime}
-                )
-                sentence = ""
-
-        transcriptDF = pd.DataFrame(transcript)
-        printAndLog(f"Transcript data extracted from {self.srtFiles[0]}", logOnly=True)
-        printAndLog(f"Transcript data shape: {transcriptDF.shape}", logOnly=True)
-        printAndLog(f"Transcript data head: {transcriptDF.head(5)}", logOnly=True)
-
-        if transcriptDF.shape[0] == 0:
-            printAndLog(
-                f"No transcript data found in {self.srtFiles[0]}. Exiting...",
-                level="error",
-            )
-            sys.exit("No transcript data found. Exiting...")
-
-        return transcriptDF
-
-    def getCombinedTranscripts(self):
-        """
-        Combines the transcript data based on a window size.
-
-        Returns:
-            DataFrame: Combined transcript data.
-        """
-        transcript = self.transcript.sort_values(by="Start")
-
-        combinedTranscript = []
-
-        currStart = transcript.iloc[0]["Start"]
-        duration = pd.Timedelta(seconds=self.config.windowSize)
-
-        while currStart < transcript.iloc[-1]["Start"]:
-            slicedTranscript = transcript[
-                (transcript["Start"] - currStart < duration)
-                & (transcript["Start"] >= currStart)
-            ]
-
-            if slicedTranscript.shape[0] == 0:
-                duration = pd.Timedelta(seconds=duration.seconds + 1)
-                continue
-
-            combinedLines = " ".join(slicedTranscript["Line"].tolist())
-            combinedTranscript.append(
-                {
-                    "Combined Lines": combinedLines,
-                    "Start": slicedTranscript.iloc[0]["Start"],
-                    "End": slicedTranscript.iloc[-1]["End"],
-                }
-            )
-
-            currStart = slicedTranscript.iloc[-1]["End"]
-            duration = pd.Timedelta(seconds=self.config.windowSize)
-
-        combinedTranscript = pd.DataFrame(combinedTranscript)
+        printAndLog(f"Processed transcript data shape: {self.combinedTranscript.shape}")
         printAndLog(
-            f"Combined Transcript data shape: {combinedTranscript.shape}", logOnly=True
-        )
-        printAndLog(
-            f"Combined Transcript data head: {combinedTranscript.head(5)}", logOnly=True
+            f"Processed transcript data head: {self.combinedTranscript.head(5)}"
         )
 
-        return combinedTranscript
+
+def processSrtFiles(srtFiles):
+    """
+    Process SRT files and extract transcript data.
+
+    Args:
+        srtFiles (list): A list of SRT file paths.
+
+    Returns:
+        pandas.DataFrame: A DataFrame containing the extracted transcript data.
+
+    Raises:
+        SystemExit: If no transcript data is found in the SRT file.
+
+    """
+    if len(srtFiles) > 1:
+        printAndLog(
+            f"Multiple SRT files found. Using the first one: {srtFiles[0]}",
+            LogOnly=True,
+        )
+
+    with open(srtFiles[0], "r") as f:
+        lines = f.readlines()
+
+    transcript = []
+
+    timeFormat = "%H:%M:%S,%f"
+    arrow = "-->"
+
+    sentence = ""
+    startTime, endTime = "", ""
+
+    for line in lines:
+        line = line.strip()
+        if line.isdigit():
+            continue
+        elif arrow in line:
+            startTime, endTime = line.split(arrow)
+            startTime = datetime.strptime(startTime.strip(), timeFormat)  # .time()
+            endTime = datetime.strptime(endTime.strip(), timeFormat)  # .time()
+        elif line:
+            sentence += " " + line
+        else:
+            transcript.append(
+                {"Line": sentence.strip(), "Start": startTime, "End": endTime}
+            )
+            sentence = ""
+
+    transcriptDF = pd.DataFrame(transcript)
+
+    if transcriptDF.shape[0] == 0:
+        printAndLog(
+            f"No transcript data found in {srtFiles[0]}. Exiting...",
+            level="error",
+        )
+        sys.exit("No transcript data found. Exiting...")
+
+    printAndLog(f"Transcript data extracted from {srtFiles[0]}", logOnly=True)
+    printAndLog(f"Transcript data shape: {transcriptDF.shape}", logOnly=True)
+    printAndLog(f"Transcript data head: {transcriptDF.head(5)}", logOnly=True)
+
+    return transcriptDF
+
+
+def getCombinedTranscripts(transcript, windowSize=30):
+    """
+    Combines overlapping transcripts within a given window size.
+
+    Args:
+        transcript (pandas.DataFrame): The input transcript data.
+        windowSize (int, optional): The window size in seconds. Defaults to 30.
+
+    Returns:
+        pandas.DataFrame: The combined transcript data.
+
+    """
+    transcript = transcript.sort_values(by="Start")
+
+    combinedTranscript = []
+    currStart = transcript.iloc[0]["Start"]
+    duration = pd.Timedelta(seconds=windowSize)
+
+    while currStart < transcript.iloc[-1]["Start"]:
+        slicedTranscript = transcript[
+            (transcript["Start"] - currStart < duration)
+            & (transcript["Start"] >= currStart)
+        ]
+
+        if slicedTranscript.shape[0] == 0:
+            duration = pd.Timedelta(seconds=duration.seconds + 1)
+            continue
+
+        combinedLines = " ".join(slicedTranscript["Line"].tolist())
+        combinedTranscript.append(
+            {
+                "Combined Lines": combinedLines,
+                "Start": slicedTranscript.iloc[0]["Start"],
+                "End": slicedTranscript.iloc[-1]["End"],
+            }
+        )
+
+        currStart = slicedTranscript.iloc[-1]["End"]
+        duration = pd.Timedelta(seconds=windowSize)
+
+    combinedTranscript = pd.DataFrame(combinedTranscript)
+
+    if combinedTranscript.shape[0] == 0:
+        printAndLog(
+            f"Error, combined transcript data appears to be empty even though tranacript data was not. Exiting...",
+            level="error",
+        )
+        sys.exit("Transcipt line combining failed. Exiting...")
+
+    
+    printAndLog(
+        f"Combined Transcript data shape: {combinedTranscript.shape}", logOnly=True
+    )
+    printAndLog(
+        f"Combined Transcript data head: {combinedTranscript.head(5)}", logOnly=True
+    )
+
+    return combinedTranscript
+
+
+def retrieveTranscript(config, overwrite=False):
+
+    transcriptData = TranscriptData(config)
+    if not config.overwriteTranscriptData and not overwrite:
+        transcriptData.makeTranscriptData(load=True)
+        if transcriptData.combinedTranscript is not None:
+            printAndLog("Transcript Data loaded from saved files.")
+            printAndLog(
+                f"Transcript Data Head: {transcriptData.combinedTranscript.head(5)}",
+                logOnly=True,
+            )
+            return transcriptData
+
+    printAndLog("Generating & saving Transcript Data...")
+    transcriptData.makeTranscriptData(load=False)
+    dataSaver(
+        transcriptData,
+        config,
+        "transcriptData",
+    )
+
+    return transcriptData

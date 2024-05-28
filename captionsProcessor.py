@@ -1,5 +1,5 @@
 from configData import configVars
-from transcriptLoader import TranscriptData
+from transcriptLoader import retrieveTranscript
 from topicExtractor import retrieveTopics
 from questionGenerator import retrieveQuestions
 from utils import printAndLog
@@ -10,7 +10,8 @@ def main():
     config.setFromEnv()
 
     printAndLog(f"Retrieving Transcript for {config.videoToUse}...")
-    videoData = TranscriptData(config)
+    videoData = retrieveTranscript(config, overwrite=True)
+    videoData.printTranscript()
 
     printAndLog(f"Retrieving Topics for {config.videoToUse}...")
     topicModeller = retrieveTopics(config, videoData)

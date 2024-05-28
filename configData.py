@@ -11,7 +11,7 @@ from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
 captionsFolder: str = "Captions"
 saveFolder: str = "savedData"
-fileTypes = ["topicModel", "topicsOverTime", "questionData"]
+fileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
 representationModelType: str = "langchain"
 
 for folder in fileTypes:
@@ -22,6 +22,7 @@ for folder in fileTypes:
     except OSError:
         logging.error(f"Creation of the directory {folderPath} failed.")
         sys.exit(f"Creation of the directory {folderPath} failed. Exiting..")
+
 
 class configVars:
     def __init__(self):
@@ -38,6 +39,7 @@ class configVars:
         self.videoToUse: str = ""
         self.windowSize: int = 30
 
+        self.overwriteTranscriptData: bool = False
         self.overwriteTopicModel: bool = False
         self.overwriteQuestionData: bool = False
 
@@ -161,6 +163,16 @@ class configVars:
         )
         envImportSuccess[self.windowSize] = False if not self.windowSize else True
 
+        self.overwriteTranscriptData = self.configFetch(
+            "OVERWRITE_EXISTING_TRANSCRIPT",
+            self.overwriteTranscriptData,
+            bool,
+            None,
+        )
+        envImportSuccess[self.overwriteTranscriptData] = (
+            False if type(self.overwriteTranscriptData) is not bool else True
+        )
+
         self.overwriteTopicModel = self.configFetch(
             "OVERWRITE_EXISTING_TOPICMODEL",
             self.overwriteTopicModel,
@@ -214,6 +226,12 @@ class configVars:
         if False in envImportSuccess.values():
             sys.exit("Exiting due to configuration parameter import problems.")
 
+        # This checks to set data in the later stages to be overwritten if the earlier stages are set to be overwritten.
+        if self.overwriteTranscriptData == True:
+            self.overwriteTopicModel = True
+            logging.info(
+                "Topic Model data will also be overwritten as Transcript data is being overwritten."
+            )
         if self.overwriteTopicModel == True:
             self.overwriteQuestionData = True
             logging.info(
@@ -221,6 +239,7 @@ class configVars:
             )
 
         logging.info("All configuration parameters set up successfully.")
+
 
 class OpenAIBot:
     """
