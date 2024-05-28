@@ -1,11 +1,16 @@
 import glob
 import os
 import sys
+import logging
 import pandas as pd
 from datetime import datetime
 from configData import captionsFolder
-from utils import printAndLog
 
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    level=logging.INFO,
+)
 
 
 class TranscriptData:
@@ -47,15 +52,14 @@ class TranscriptData:
         """
         if not os.path.exists(captionsFolder):
             os.makedirs(captionsFolder)
-            printAndLog(f"Captions folder not found. Created folder: {captionsFolder}.", level="error")
+            logging.error(
+                f"Captions folder not found. Created folder: {captionsFolder}."
+            )
             sys.exit("Captions folder not found. Exiting...")
 
-        if not os.path.exists(
-            os.path.join(captionsFolder, self.config.videoToUse)
-        ):
-            printAndLog(
-                f"Video folder not found for {self.config.videoToUse} in Caption folder {captionsFolder}.",
-                level="error",
+        if not os.path.exists(os.path.join(captionsFolder, self.config.videoToUse)):
+            logging.error(
+                f"Video folder not found for {self.config.videoToUse} in Caption folder {captionsFolder}."
             )
             sys.exit("Captions folder not found. Exiting...")
 
@@ -63,9 +67,8 @@ class TranscriptData:
             os.path.join(captionsFolder, self.config.videoToUse, "*.srt")
         )
         if len(srtFiles) == 0:
-            printAndLog(
-                f"No SRT files found in {captionsFolder}/{self.config.videoToUse}.",
-                level="error",
+            logging.error(
+                f"No SRT files found in {captionsFolder}/{self.config.videoToUse}."
             )
             sys.exit("No SRT files found. Exiting...")
 
@@ -79,9 +82,8 @@ class TranscriptData:
             DataFrame: Processed transcript data.
         """
         if len(self.srtFiles) > 1:
-            printAndLog(
-                f"Multiple SRT files found. Using the first one: {self.srtFiles[0]}",
-                LogOnly=True,
+            logging.info(
+                f"Multiple SRT files found. Using the first one: {self.srtFiles[0]}"
             )
 
         with open(self.srtFiles[0], "r") as f:
@@ -112,15 +114,12 @@ class TranscriptData:
                 sentence = ""
 
         transcriptDF = pd.DataFrame(transcript)
-        printAndLog(f"Transcript data extracted from {self.srtFiles[0]}", logOnly=True)
-        printAndLog(f"Transcript data shape: {transcriptDF.shape}", logOnly=True)
-        printAndLog(f"Transcript data head: {transcriptDF.head(5)}", logOnly=True)
+        logging.info(f"Transcript data extracted from {self.srtFiles[0]}")
+        logging.info(f"Transcript data shape: {transcriptDF.shape}")
+        logging.info(f"Transcript data head: {transcriptDF.head(5)}")
 
         if transcriptDF.shape[0] == 0:
-            printAndLog(
-                f"No transcript data found in {self.srtFiles[0]}. Exiting...",
-                level="error",
-            )
+            logging.error(f"No transcript data found in {self.srtFiles[0]}. Exiting...")
             sys.exit("No transcript data found. Exiting...")
 
         return transcriptDF
@@ -162,11 +161,9 @@ class TranscriptData:
             duration = pd.Timedelta(seconds=self.config.windowSize)
 
         combinedTranscript = pd.DataFrame(combinedTranscript)
-        printAndLog(
-            f"Combined Transcript data shape: {combinedTranscript.shape}", logOnly=True
+        logging.info(
+            f"Combined Transcript data shape: {combinedTranscript.shape}",
         )
-        printAndLog(
-            f"Combined Transcript data head: {combinedTranscript.head(5)}", logOnly=True
-        )
+        logging.info(f"Combined Transcript data head: {combinedTranscript.head(5)}")
 
         return combinedTranscript

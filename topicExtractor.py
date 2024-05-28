@@ -1,4 +1,5 @@
 import sys
+import logging
 import time
 from sklearn.feature_extraction.text import CountVectorizer
 from langchain_community.callbacks import get_openai_callback
@@ -6,7 +7,7 @@ import openai
 from bertopic import BERTopic
 from keybert import KeyBERT
 from configData import OpenAIBot, LangChainBot
-from utils import dataLoader, dataSaver, printAndLog, getBinCount
+from utils import dataLoader, dataSaver, getBinCount
 from configData import representationModelType
 
 # This is to suppress the divide by zero warning from numpy.
@@ -16,6 +17,12 @@ from configData import representationModelType
 from numpy import seterr
 
 seterr(divide="ignore")
+
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    level=logging.INFO,
+)
 
 
 class TopicModeller:
@@ -151,24 +158,24 @@ class TopicModeller:
                 return True
 
             except openai.AuthenticationError as e:
-                printAndLog(f"Error Message: {e}")
+                logging.error(f"Error Message: {e}")
                 return False
             except openai.RateLimitError as e:
-                printAndLog(f"Error Message: {e}")
-                printAndLog("Rate limit hit. Pausing for a minute.")
+                logging.error(f"Error Message: {e}")
+                logging.error("Rate limit hit. Pausing for a minute.")
                 time.sleep(60)
             except openai.Timeout as e:
-                printAndLog(f"Error Message: {e}")
-                printAndLog("Timed out. Pausing for a minute.")
+                logging.error(f"Error Message: {e}")
+                logging.error("Timed out. Pausing for a minute.")
                 time.sleep(60)
             except Exception as e:
-                printAndLog(f"Error Message: {e}")
-                printAndLog("Failed to complete fitting operation on BERTopic.")
+                logging.error(f"Error Message: {e}")
+                logging.error("Failed to complete fitting operation on BERTopic.")
                 return False
             callAttemptCount += 1
 
         if callAttemptCount >= self.callMaxLimit:
-            printAndLog(
+            logging.error(
                 f"Failed to send message at max limit of {self.callMaxLimit} times."
             )
             return False
@@ -181,7 +188,7 @@ class TopicModeller:
             fitSuccess = self.fitTopicModel()
 
         if not fitSuccess:
-            printAndLog("Failed to fit the topic model. Exiting...", level="error")
+            logging.error("Failed to fit the topic model. Exiting...")
             sys.exit("Failed to fit the topic model. Exiting...")
 
         if representationModelType == "langchain":
@@ -192,7 +199,7 @@ class TopicModeller:
         if representationModelType == "openai":
             self.tokenCount = self.OpenAIChatBot.tokenUsage
 
-        printAndLog(
+        logging.info(
             f"Topic Extraction Token Count: {self.tokenCount}",
         )
 
@@ -202,13 +209,13 @@ class TopicModeller:
         """
         getAllTopics = self.topicModel.get_topics()
         topicList = {topicID: getAllTopics[topicID][0][0] for topicID in getAllTopics}
-        printAndLog(topicList)
+        logging.info(topicList)
 
     def printTokenCount(self):
         """
         Print the token count.
         """
-        printAndLog(
+        logging.info(
             f"Topic Modelling Token Count: {self.tokenCount}",
         )
 
@@ -233,22 +240,19 @@ def retrieveTopics(config, videoData, overwrite=False):
             topicModeller.topicModel is not None
             and topicModeller.topicsOverTime is not None
         ):
-            printAndLog("Topic Model and Data loaded from saved files.")
-            printAndLog(
-                f"Topics over Time Head: {topicModeller.topicsOverTime.head(5)}",
-                logOnly=True,
+            logging.info("Topic Model and Data loaded from saved files.")
+            logging.info(
+                f"Topics over Time Head: {topicModeller.topicsOverTime.head(5)}"
             )
             return topicModeller
 
-    printAndLog("Generating & saving Topic Model and Data...")
+    logging.info("Generating & saving Topic Model and Data...")
 
     topicModeller.makeTopicModel(load=False)
     topicModeller.saveTopicModel()
 
-    printAndLog(f"Topic Model and Data generated and saved for current configuration.")
-    printAndLog(
-        f"Topics over Time Head: {topicModeller.topicsOverTime.head(5)}", logOnly=True
-    )
+    logging.info(f"Topic Model and Data generated and saved for current configuration.")
+    logging.info(f"Topics over Time Head: {topicModeller.topicsOverTime.head(5)}")
     return topicModeller
 
 

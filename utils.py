@@ -4,6 +4,12 @@ import logging
 from bertopic import BERTopic
 from configData import representationModelType, saveFolder
 
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    level=logging.INFO,
+)
+
 
 def dataSaver(data, config, dataType, saveNameAppend=""):
     """
@@ -34,11 +40,10 @@ def dataSaver(data, config, dataType, saveNameAppend=""):
         else:
             pickle.dump(data, open(savePath + ".p", "wb"))
         return True
-        
+
     except Exception as e:
-        printAndLog(
-            f"Error saving {dataType} for {config.videoToUse}: {e}. Data will need to be reloaded next run.",
-            level="warn",
+        logging.warn(
+            f"Error saving {dataType} for {config.videoToUse}: {e}. Data will need to be reloaded next run."
         )
         return False
 
@@ -69,36 +74,10 @@ def dataLoader(config, dataType, saveNameAppend=""):
                 return BERTopic.load(savePath)
             return pickle.load(open(savePath, "rb"))
     except Exception as e:
-        printAndLog(
-            f"Error loading {dataType} for {config.videoToUse}: {e}. Data will need to be reloaded.",
-            level="warn",
+        logging.warn(
+            f"Error loading {dataType} for {config.videoToUse}: {e}. Data will need to be reloaded."
         )
     return None
-
-
-def printAndLog(message, level="info", logOnly=False):
-    """
-    Print a message and log it at the given log level.
-
-    Args:
-        message: The message to be printed and logged.
-        level: The log level (default is "info").
-    """
-    if level == "info":
-        logging.info(message)
-    elif level == "debug":
-        logging.debug(message)
-    elif level == "warning" or level == "warn":
-        logging.warning(message)
-    elif level == "error":
-        logging.error(message)
-    elif level == "critical":
-        logging.critical(message)
-    else:
-        raise ValueError(f"Invalid log level: {level}")
-
-    if not logOnly:
-        print(message)
 
 
 def getBinCount(combinedTranscript, windowSize=120):

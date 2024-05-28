@@ -1,8 +1,15 @@
 import json
 import sys
+import logging
 import pandas as pd
-from utils import dataLoader, dataSaver, printAndLog
+from utils import dataLoader, dataSaver
 from configData import OpenAIBot
+
+logging.basicConfig(
+    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    level=logging.INFO,
+)
 
 
 class QuestionData:
@@ -84,7 +91,7 @@ class QuestionData:
             self.getQuestionDataFromResponse()
 
             self.tokenCount = self.OpenAIChatBot.tokenUsage
-            printAndLog(
+            logging.info(
                 f"Question Generation Token Count: {self.tokenCount}",
             )
 
@@ -135,28 +142,29 @@ class QuestionData:
                 response = response[4:]
 
             try:
-                parsedResponse = json.loads(response)                
+                parsedResponse = json.loads(response)
             except json.JSONDecodeError as e:
-                printAndLog(f"Error decoding JSON: {e} for received response: {parsedResponse}", level="warn")
-                printAndLog(f"Question for topic: {topic} not generated.", level="warn")
+                logging.warn(
+                    f"Error decoding JSON: {e} for received response: {parsedResponse}"
+                )
+                logging.warn(f"Question for topic: {topic} not generated.")
                 continue
 
-            printAndLog(f"Topic: {topic}")
-            printAndLog(
+            logging.info(f"Topic: {topic}")
+            logging.info(
                 f"Insert Point: {self.dominantTopics[topic]['End'].strftime('%H:%M:%S')}"
             )
-            question = f"Question: {parsedResponse['question'][100]+'...'}"
+            question = f"Question: {parsedResponse['question'][:100]+'...'}"
             answers = "Answers: " + "\n\t".join(parsedResponse["answers"])
             correct = f"Correct: {parsedResponse['correct']}"
-            reason = f"Reason: {parsedResponse['reason'][100]+'...'}"
-            printAndLog("\n".join([question, answers, correct, reason]))
-            print("------------------------------------")
+            reason = f"Reason: {parsedResponse['reason'][:100]+'...'}"
+            logging.info("\n".join([question, answers, correct, reason]))
 
     def printTokenCount(self):
         """
         Prints the token count.
         """
-        printAndLog(
+        logging.info(
             f"Question Generation Token Count: {self.tokenCount}",
         )
 
@@ -182,23 +190,17 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
         questionData.makeQuestionData(load=True)
 
         if questionData.responseData is not None:
-            printAndLog("Question Data loaded from saved files.")
-            printAndLog(
-                f"Question Data Count: {len(questionData.responseData)}",
-                logOnly=True,
-            )
+            logging.info("Question Data loaded from saved files.")
+            logging.info(f"Question Data Count: {len(questionData.responseData)}")
             return questionData
 
-    printAndLog("Generating Question Data...", logOnly=True)
+    logging.info("Generating Question Data...")
 
     questionData.makeQuestionData(load=False)
     questionData.saveQuestionData()
 
-    printAndLog("Question Data generated and saved for current configuration.")
-    printAndLog(
-        f"Question Data Count: {len(questionData.responseData)}",
-        logOnly=True,
-    )
+    logging.info("Question Data generated and saved for current configuration.")
+    logging.info(f"Question Data Count: {len(questionData.responseData)}")
     return questionData
 
 
@@ -247,7 +249,6 @@ def getClusteredTopics(topicModeller, videoData=None):
     # We also filter out any topics that are not relevant in other segments.
     filteredTopics = filteredGroupsDF[filteredGroupsDF["Topic"] != -1]
 
-
     try:
 
         # We can merge any segments where the main topic is the same.
@@ -283,8 +284,8 @@ def getClusteredTopics(topicModeller, videoData=None):
         )
 
     except Exception as e:
-        printAndLog(f"Error clustering topics: {e}", level="error")
-        printAndLog(f"Clustering error on Video: {videoData.config.videoToUse}", logOnly=True)
+        logging.error(f"Error clustering topics: {e}")
+        logging.error(f"Clustering error on Video: {videoData.config.videoToUse}")
         sys.exit(f"Error clustering topics: {e}")
 
     # We add the topic title for clarity in the final DataFrame.
@@ -295,11 +296,11 @@ def getClusteredTopics(topicModeller, videoData=None):
     )
 
     if clusteredTopics.shape[0] == 0:
-        printAndLog("No clustered topics found. Exiting...", level="error")
+        logging.info("No clustered topics found. Exiting...")
         sys.exit("No clustered topics found. Exiting...")
 
-    printAndLog(f"Clustered Topics data shape: {clusteredTopics.shape}", logOnly=True)
-    printAndLog(f"Clustered Topics head: {clusteredTopics.head(5)}", logOnly=True)
+    logging.info(f"Clustered Topics data shape: {clusteredTopics.shape}")
+    logging.info(f"Clustered Topics head: {clusteredTopics.head(5)}")
 
     return clusteredTopics
 
@@ -323,11 +324,11 @@ def getDominantTopic(clusteredTopics):
     dominantTopics = pd.concat(dominantTopics).sort_values("Start")
 
     if dominantTopics.shape[0] == 0:
-        printAndLog("No dominant topics found. Exiting...", level="error")
+        logging.error("No dominant topics found. Exiting...")
         sys.exit("No dominant topics found. Exiting...")
 
-    printAndLog(f"Dominant Topics data shape: {dominantTopics.shape}", logOnly=True)
-    printAndLog(f"Dominant Topics head: {dominantTopics.head(5)}", logOnly=True)
+    logging.info(f"Dominant Topics data shape: {dominantTopics.shape}")
+    logging.info(f"Dominant Topics head: {dominantTopics.head(5)}")
 
     return dominantTopics.set_index("Topic Title").to_dict(orient="index")
 
@@ -376,17 +377,14 @@ def getTextAndQuestion(dominantTopics, videoData):
         relevantText[topic] = " ".join(relevantSentences["Combined Lines"].tolist())
         questionQueryText[topic] = questionTaskBuilder(topic, relevantText[topic])
 
-        printAndLog(
-            f"Time range for relevant text for Topic - {topic}: {dominantTopics[topic]['Start'].strftime('%H:%M:%S')} to {dominantTopics[topic]['End'].strftime('%H:%M:%S')}",
-            logOnly=True,
+        logging.info(
+            f"Time range for relevant text for Topic - {topic}: {dominantTopics[topic]['Start'].strftime('%H:%M:%S')} to {dominantTopics[topic]['End'].strftime('%H:%M:%S')}"
         )
-        # printAndLog(
-        #     f"Relevant text selected for Topic - {topic}: {relevantText[topic]}",
-        #     logOnly=True,
+        # logging.info(
+        #     f"Relevant text selected for Topic - {topic}: {relevantText[topic]}"
         # )
-        printAndLog(
-            f"Query to generate question for Topic - {topic} - First 100 Characters: {questionQueryText[topic][:100]}",
-            logOnly=True,
+        logging.info(
+            f"Query to generate question for Topic - {topic} - First 100 Characters: {questionQueryText[topic][:100]}"
         )
 
     return relevantText, questionQueryText
