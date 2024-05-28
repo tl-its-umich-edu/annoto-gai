@@ -24,7 +24,6 @@ class TranscriptData:
         self.config = config
         self.srtFiles = None
         self.transcript = None
-        self.processedSentences = None
         self.combinedTranscript = None
 
     def initialize(self, config):
@@ -51,6 +50,7 @@ class TranscriptData:
             self.combinedTranscript = getCombinedTranscripts(
                 self.transcript, self.config.windowSize
             )
+            self.saveTranscriptData()
 
     def loadTranscriptData(self):
         """
@@ -58,11 +58,15 @@ class TranscriptData:
         """
         loadedData = dataLoader(self.config, "transcriptData")
         if loadedData is None:
-            loadedData = (None, None, None, None)
+            loadedData = [None] * 3
+        elif type(loadedData) != tuple or len(loadedData) != 3:
+            logging.warning(
+                "Loaded data for Transcript Data is incomplete/broken. Data will be regenerated and saved."
+            )
+            loadedData = [None] * 3
         (
             self.srtFiles,
             self.transcript,
-            self.processedSentences,
             self.combinedTranscript,
         ) = loadedData
 
@@ -74,7 +78,6 @@ class TranscriptData:
             (
                 self.srtFiles,
                 self.transcript,
-                self.processedSentences,
                 self.combinedTranscript,
             ),
             self.config,
@@ -247,10 +250,5 @@ def retrieveTranscript(config, overwrite=False):
 
     logging.info("Generating & saving Transcript Data...")
     transcriptData.makeTranscriptData(load=False)
-    dataSaver(
-        transcriptData,
-        config,
-        "transcriptData",
-    )
 
     return transcriptData
