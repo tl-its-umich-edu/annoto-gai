@@ -260,6 +260,10 @@ def getClusteredTopics(topicModeller, videoData=None):
         dominantTopic = group[1].iloc[0]["Topic"]
         if dominantTopic != -1:
             filteredGroups.append(group[1])
+            
+    if len(filteredGroups) == 0:
+        logging.error("No relevant topics found. Exiting...")
+        sys.exit("No relevant topics found. Exiting...")
 
     filteredGroupsDF = pd.concat(filteredGroups)
 
