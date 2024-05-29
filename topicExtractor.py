@@ -228,7 +228,7 @@ def retrieveTopics(config, videoData, overwrite=False):
     Returns:
         TopicModeller: The topic modeller object containing the generated topics and data.
     """
-    topicModeller = TopicModeller(config, videoData)
+    topicModeller = TopicModeller(config)
     if not config.overwriteTopicModel and not overwrite:
         topicModeller.makeTopicModel(load=True)
         if (
@@ -243,6 +243,11 @@ def retrieveTopics(config, videoData, overwrite=False):
 
     logging.info("Generating & saving Topic Model and Data...")
 
+    if videoData is None:
+        logging.error("Video Data not provided. Exiting...")
+        sys.exit("Video Data not provided. Exiting...")
+    else:
+        topicModeller.intialize(videoData)
     topicModeller.makeTopicModel(load=False)
     topicModeller.saveTopicModel()
 

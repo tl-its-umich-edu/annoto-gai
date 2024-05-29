@@ -94,13 +94,37 @@ class QuestionData:
         """
         Loads the question data from a file.
         """
-        self.responseData = dataLoader(self.config, "questionData")
+        loadedData = dataLoader(self.config, "questionData")
+        if loadedData is None:
+            loadedData = [None] * 5
+        if len(loadedData) != 5:
+            logging.warning(
+                "Loaded data for Question Data is incomplete/broken. Data will be regenerated and saved."
+            )
+            loadedData = [None] * 5
+        (
+            self.clusteredTopics,
+            self.dominantTopics,
+            self.relevantText,
+            self.questionQueryText,
+            self.responseData,
+        ) = loadedData
 
     def saveQuestionData(self):
         """
         Saves the question data to a file.
         """
-        dataSaver(self.responseData, self.config, "questionData")
+        dataSaver(
+            (
+                self.clusteredTopics,
+                self.dominantTopics,
+                self.relevantText,
+                self.questionQueryText,
+                self.responseData,
+            ),
+            self.config,
+            "questionData",
+        )
 
     def getQuestionDataFromResponse(self):
         """
@@ -179,8 +203,6 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
         QuestionData: The question data object containing the generated or retrieved question data.
     """
     questionData = QuestionData(config)
-    questionData.initialize(topicModeller, videoData)
-
     if not config.overwriteQuestionData and not overwrite:
         questionData.makeQuestionData(load=True)
 
@@ -188,9 +210,14 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
             logging.info("Question Data loaded from saved files.")
             logging.info(f"Question Data Count: {len(questionData.responseData)}")
             return questionData
+        
+    if topicModeller is None:
+        logging.error("Topic Modeller not provided. Exiting...")
+        sys.exit("Topic Modeller not provided. Exiting...")
+    else:
+        questionData.initialize(topicModeller, videoData)
 
     logging.info("Generating Question Data...")
-
     questionData.makeQuestionData(load=False)
     questionData.saveQuestionData()
 
