@@ -124,7 +124,8 @@ class configVars:
             logging.error(errorMsg)
             sys.exit(errorMsg)
 
-        load_dotenv()
+        # Force the environment variables to be read from the .env file every time.
+        load_dotenv(".env", override=True)
 
         try:
             self.logLevel = str(os.environ.get("LOG_LEVEL", self.logLevel)).upper()
