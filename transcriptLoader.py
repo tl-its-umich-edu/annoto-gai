@@ -46,7 +46,7 @@ class TranscriptData:
             self.loadTranscriptData()
         else:
             self.srtFiles = self.validateVideoFiles()
-            self.transcript = processSrtFiles(self.srtFiles)
+            self.transcript = processSrtFiles(self.srtFiles, self.config.minVideoLength)
             self.combinedTranscript = getCombinedTranscripts(
                 self.transcript, self.config.windowSize
             )
@@ -127,7 +127,7 @@ class TranscriptData:
         )
 
 
-def processSrtFiles(srtFiles):
+def processSrtFiles(srtFiles, minTranscriptLength=300):
     """
     Process SRT files and extract transcript data.
 
@@ -179,6 +179,16 @@ def processSrtFiles(srtFiles):
     if transcriptDF.shape[0] == 0:
         logging.error(f"No transcript data found in {srtFiles[0]}. Exiting...")
         sys.exit("No transcript data found. Exiting...")
+        
+    if (transcriptDF["End"].iloc[-1] - transcriptDF["Start"].iloc[0]) < pd.Timedelta(
+        seconds=minTranscriptLength
+    ):
+        logging.error(
+            f"Video transcript is less than {minTranscriptLength} seconds long and not suitable for processing. Exiting..."
+        )
+        sys.exit(
+            f"Video transcript is less than {minTranscriptLength} seconds long and not suitable for processing. Exiting..."
+        )
 
     logging.info(f"Transcript data extracted from {srtFiles[0]}")
     logging.info(f"Transcript data shape: {transcriptDF.shape}")

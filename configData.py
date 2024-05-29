@@ -10,9 +10,9 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S%z',
-    level=logging.INFO
+    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    level=logging.INFO,
 )
 
 captionsFolder: str = "Captions"
@@ -43,6 +43,8 @@ class configVars:
         }
 
         self.videoToUse: str = ""
+
+        self.minVideoLength: int = 300
         self.windowSize: int = 30
 
         self.overwriteTranscriptData: bool = False
@@ -160,6 +162,16 @@ class configVars:
                 lambda name: len(name) > 0,
             )
             envImportSuccess[self.videoToUse] = False if not self.videoToUse else True
+
+        self.minVideoLength = self.configFetch(
+            "MINIMUM_VIDEO_DURATION",
+            self.minVideoLength,
+            int,
+            lambda x: x >= 300,
+        )
+        envImportSuccess[self.minVideoLength] = (
+            False if not self.minVideoLength else True
+        )
 
         self.windowSize = self.configFetch(
             "WINDOW_SIZE",
