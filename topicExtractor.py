@@ -214,7 +214,7 @@ class TopicModeller:
 
 
 # Using a manual overwrite option for debugging.
-def retrieveTopics(config, videoData, overwrite=False):
+def retrieveTopics(config, videoData=None, overwrite=False):
     """
     Retrieves topics using the specified configuration and video data.
 

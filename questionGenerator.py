@@ -5,6 +5,7 @@ import pandas as pd
 from utils import dataLoader, dataSaver
 from configData import OpenAIBot
 
+
 class QuestionData:
     """
     Represents a class for managing question data.
@@ -40,7 +41,6 @@ class QuestionData:
         """
         self.config = config
         self.videoData = None
-        self.topicModeller = None
 
         self.clusteredTopics = None
         self.dominantTopics = None
@@ -187,7 +187,7 @@ class QuestionData:
 
 
 # Using a manual overwrite option for debugging.
-def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
+def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=False):
     """
     Retrieves or generates question data based on the given configuration and topic modeller.
 
@@ -210,7 +210,7 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
             logging.info("Question Data loaded from saved files.")
             logging.info(f"Question Data Count: {len(questionData.responseData)}")
             return questionData
-        
+
     if topicModeller is None:
         logging.error("Topic Modeller not provided. Exiting...")
         sys.exit("Topic Modeller not provided. Exiting...")
