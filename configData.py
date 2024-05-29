@@ -20,6 +20,11 @@ saveFolder: str = "savedData"
 fileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
 representationModelType: str = "langchain"
 
+# Minimum threshold for the video duration in seconds for processing.
+# Shorter videos might not have enough content to generate meaningful topics and questions.
+# Default is 300s.
+minVideoLength: int = 300
+
 for folder in fileTypes:
     folderPath = os.path.join(saveFolder, folder)
     try:
@@ -44,7 +49,6 @@ class configVars:
 
         self.videoToUse: str = ""
 
-        self.minVideoLength: int = 300
         self.windowSize: int = 30
 
         self.overwriteTranscriptData: bool = False
@@ -162,16 +166,6 @@ class configVars:
                 lambda name: len(name) > 0,
             )
             envImportSuccess[self.videoToUse] = False if not self.videoToUse else True
-
-        self.minVideoLength = self.configFetch(
-            "MINIMUM_VIDEO_DURATION",
-            self.minVideoLength,
-            int,
-            lambda x: x >= 300,
-        )
-        envImportSuccess[self.minVideoLength] = (
-            False if not self.minVideoLength else True
-        )
 
         self.windowSize = self.configFetch(
             "WINDOW_SIZE",

@@ -4,7 +4,7 @@ import sys
 import logging
 import pandas as pd
 from datetime import datetime
-from configData import captionsFolder
+from configData import captionsFolder, minVideoLength
 from utils import dataLoader, dataSaver
 
 
@@ -46,7 +46,7 @@ class TranscriptData:
             self.loadTranscriptData()
         else:
             self.srtFiles = self.validateVideoFiles()
-            self.transcript = processSrtFiles(self.srtFiles, self.config.minVideoLength)
+            self.transcript = processSrtFiles(self.srtFiles)
             self.combinedTranscript = getCombinedTranscripts(
                 self.transcript, self.config.windowSize
             )
@@ -127,7 +127,7 @@ class TranscriptData:
         )
 
 
-def processSrtFiles(srtFiles, minTranscriptLength=300):
+def processSrtFiles(srtFiles, minTranscriptLength=minVideoLength):
     """
     Process SRT files and extract transcript data.
 
@@ -179,7 +179,7 @@ def processSrtFiles(srtFiles, minTranscriptLength=300):
     if transcriptDF.shape[0] == 0:
         logging.error(f"No transcript data found in {srtFiles[0]}. Exiting...")
         sys.exit("No transcript data found. Exiting...")
-        
+
     if (transcriptDF["End"].iloc[-1] - transcriptDF["Start"].iloc[0]) < pd.Timedelta(
         seconds=minTranscriptLength
     ):
