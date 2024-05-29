@@ -237,6 +237,18 @@ def getCombinedTranscripts(transcript, windowSize=30):
 
 
 def retrieveTranscript(config, overwrite=False):
+    """
+    Retrieves the transcript data based on the given configuration.
+
+    Args:
+        config (object): The configuration object containing the necessary parameters.
+        overwrite (bool, optional): Flag indicating whether to overwrite existing transcript data. Defaults to False.
+        Note that overwrite is used only for debugging purposes and should not be set to True in production.
+        Use the OVERWRITE_EXISTING_TRANSCRIPT parameter to overwrite data.
+
+    Returns:
+        object: The TranscriptData object containing the retrieved transcript data.
+    """
 
     transcriptData = TranscriptData(config)
     if not config.overwriteTranscriptData and not overwrite:
