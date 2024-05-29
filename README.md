@@ -12,7 +12,7 @@ You can access videos from [MiVideo](https://www.mivideo.it.umich.edu/). It is r
 The `captionsProcessor.ipynb` notebook reads captions in the .srt file format provided within the subfolders of the `Captions` folder.  
 
 ### Processing transcripts: 
-The `TranscriptData` class when passed a `Config` object with the required video name and credentials will create a class object containing information for the segmented transcript provided within the subfolders of the `Captions` folder, where each line has an approximate duration, 30s default in this case. This will be used for topic extraction and segmentation. 
+The `retrieveTranscript` function when passed a `configVars` class object  will return a class object containing information for the segmented transcript provided within the subfolders of the `Captions` folder, where each line has an approximate duration, 30s default in this case. This will be used for topic extraction and segmentation. 
 
 ### Extracting topics:
 The `retrieveTopics` function takes the segmented transcript and return the `BERTopic` model used, and the topics over time that were extracted from the transcript. 
@@ -28,7 +28,7 @@ The `captionsProcessor.py` script currently runs similarly to the `captionsProce
 
 ## Other notes: 
 #### Saving & loading data:
-A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the  `retrieveTopics` or `retrieveQuestions`functions will rerun them to save an updated version of the data. Ideally, use the `.env` to adjust this setting, and only use `overwrite=True` when debugging. 
+A basic saving and loading functionality is also utilized to load in the model and topics if they have been calculated before. Passing `overwrite=True` to the `retrieveTranscript`, `retrieveTopics`, or `retrieveQuestions` functions will rerun them to save an updated version of the data. Ideally, use the `.env` to adjust this setting, and only use `overwrite=True` when debugging. 
 
 `BERTopic` models cannot be saved as pickle files, and need to used their inbuilt saving mechanism to be saved instead of a pickle. All other data saved is stored as a pickle.
 This is also why the `TopicModeller` class can't be saved as single entity easily. Saving the model in it needs a different mechanism. 
@@ -36,7 +36,7 @@ In a future implementation, the need for the model being saved itself could be r
 
 #### Scripts used:
 Currently, 5 scripts are used:
-1. `config.py`: Contains the `Config` class used to store environmental and confirugration variables, as well as two other classes for OpenAI and LangChain API usage.
+1. `configData.py`: Contains the `configVars` class used to store environmental variables, as well as two other classes for OpenAI and LangChain API usage.
 2. `utils.py`: Contains common functions used to save and load data.
 3. `transcriptLoader.py`: Contains the `TranscriptData` class that handles transcript file loading and initital processing.
 4. `topicExtractor.py`: Contains the `TopicModeller` class and functions to handle topic extraction from the processed transcript data.

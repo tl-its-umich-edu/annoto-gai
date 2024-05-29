@@ -55,7 +55,7 @@ def dataLoader(config, dataType, saveNameAppend=""):
     """
     if config.useKeyBERT:
         saveNameAppend = f"_KeyBERT{saveNameAppend}"
-    if dataType in ["topicsOverTime", "questionData"]:
+    if dataType in ["transcriptData", "topicsOverTime", "questionData"]:
         saveNameAppend = f"{saveNameAppend}.p"
 
     saveName = f"{config.videoToUse}_{representationModelType}{saveNameAppend}"

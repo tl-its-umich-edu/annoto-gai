@@ -222,6 +222,8 @@ def retrieveTopics(config, videoData, overwrite=False):
         config (Config): The configuration object.
         videoData (VideoData): The video data object.
         overwrite (bool, optional): Whether to overwrite existing topic model and data. Defaults to False.
+        Note that overwrite is used only for debugging purposes and should not be set to True in production.
+        Use the OVERWRITE_EXISTING_TOPICMODEL parameter to overwrite data.
 
     Returns:
         TopicModeller: The topic modeller object containing the generated topics and data.

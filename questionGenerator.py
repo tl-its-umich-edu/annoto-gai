@@ -172,6 +172,8 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
         topicModeller (TopicModeller): The topic modeller object used for topic modeling.
         videoData (VideoData, optional): The video data object containing information about the video. Defaults to None.
         overwrite (bool, optional): Whether to overwrite existing question data. Defaults to False.
+        Note that overwrite is used only for debugging purposes and should not be set to True in production.
+        Use the OVERWRITE_EXISTING_QUESTIONS parameter to overwrite data.
 
     Returns:
         QuestionData: The question data object containing the generated or retrieved question data.
