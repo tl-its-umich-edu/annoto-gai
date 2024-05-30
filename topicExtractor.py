@@ -18,6 +18,7 @@ from numpy import seterr
 
 seterr(divide="ignore")
 
+
 class TopicModeller:
     """
     Class for performing topic modeling on video data.
@@ -181,8 +182,10 @@ class TopicModeller:
             fitSuccess = self.fitTopicModel()
 
         if not fitSuccess:
-            logging.error("Failed to fit the topic model. Exiting...")
-            sys.exit("Failed to fit the topic model. Exiting...")
+            logging.error(
+                "Failed to fit the topic model. PLease check logs for possible errors."
+            )
+            sys.exit("FTopic model fitting failed. Exiting...")
 
         if representationModelType == "langchain":
             self.tokenCount = cb.total_tokens
@@ -214,7 +217,7 @@ class TopicModeller:
 
 
 # Using a manual overwrite option for debugging.
-def retrieveTopics(config, videoData, overwrite=False):
+def retrieveTopics(config, videoData=None, overwrite=False):
     """
     Retrieves topics using the specified configuration and video data.
 
@@ -228,7 +231,7 @@ def retrieveTopics(config, videoData, overwrite=False):
     Returns:
         TopicModeller: The topic modeller object containing the generated topics and data.
     """
-    topicModeller = TopicModeller(config, videoData)
+    topicModeller = TopicModeller(config)
     if not config.overwriteTopicModel and not overwrite:
         topicModeller.makeTopicModel(load=True)
         if (
@@ -243,6 +246,13 @@ def retrieveTopics(config, videoData, overwrite=False):
 
     logging.info("Generating & saving Topic Model and Data...")
 
+    if videoData is None:
+        logging.error(
+            "No saved data was found, and no video data was provided in function call needed to extract topics."
+        )
+        sys.exit("Video Data not provided. Exiting...")
+    else:
+        topicModeller.intialize(videoData)
     topicModeller.makeTopicModel(load=False)
     topicModeller.saveTopicModel()
 

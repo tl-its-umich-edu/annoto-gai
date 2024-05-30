@@ -4,7 +4,7 @@ import sys
 import logging
 import pandas as pd
 from datetime import datetime
-from configData import captionsFolder
+from configData import captionsFolder, minVideoLength
 from utils import dataLoader, dataSaver
 
 
@@ -96,13 +96,13 @@ class TranscriptData:
             logging.error(
                 f"Captions folder not found. Created folder: {captionsFolder}."
             )
-            sys.exit("Captions folder not found. Exiting...")
+            sys.exit("Missing Captions parent folder. Exiting...")
 
         if not os.path.exists(os.path.join(captionsFolder, self.config.videoToUse)):
             logging.error(
                 f"Video folder not found for {self.config.videoToUse} in Caption folder {captionsFolder}."
             )
-            sys.exit("Captions folder not found. Exiting...")
+            sys.exit("Missing Video folder. Exiting...")
 
         srtFiles = glob.glob(
             os.path.join(captionsFolder, self.config.videoToUse, "*.srt")
@@ -127,7 +127,7 @@ class TranscriptData:
         )
 
 
-def processSrtFiles(srtFiles):
+def processSrtFiles(srtFiles, minTranscriptLength=minVideoLength):
     """
     Process SRT files and extract transcript data.
 
@@ -179,6 +179,14 @@ def processSrtFiles(srtFiles):
     if transcriptDF.shape[0] == 0:
         logging.error(f"No transcript data found in {srtFiles[0]}. Exiting...")
         sys.exit("No transcript data found. Exiting...")
+
+    if (transcriptDF["End"].iloc[-1] - transcriptDF["Start"].iloc[0]) < pd.Timedelta(
+        seconds=minTranscriptLength
+    ):
+        logging.error(
+            f"Video transcript is less than {minTranscriptLength} seconds long and not suitable for processing. Exiting..."
+        )
+        sys.exit(f"Transcript too short. Exiting...")
 
     logging.info(f"Transcript data extracted from {srtFiles[0]}")
     logging.info(f"Transcript data shape: {transcriptDF.shape}")

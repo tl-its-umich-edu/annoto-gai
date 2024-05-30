@@ -10,15 +10,20 @@ from langchain.chains.question_answering import load_qa_chain
 from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
 
 logging.basicConfig(
-    format='%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S%z',
-    level=logging.INFO
+    format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+    level=logging.INFO,
 )
 
 captionsFolder: str = "Captions"
 saveFolder: str = "savedData"
 fileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
 representationModelType: str = "langchain"
+
+# Minimum threshold for the video duration in seconds for processing.
+# Shorter videos might not have enough content to generate meaningful topics and questions.
+# Default is 300s.
+minVideoLength: int = 300
 
 for folder in fileTypes:
     folderPath = os.path.join(saveFolder, folder)
@@ -27,7 +32,7 @@ for folder in fileTypes:
             os.makedirs(folderPath)
     except OSError:
         logging.error(f"Creation of the directory {folderPath} failed.")
-        sys.exit(f"Creation of the directory {folderPath} failed. Exiting..")
+        sys.exit(f"Directory creation failure. Exiting...")
 
 
 class configVars:
@@ -43,6 +48,7 @@ class configVars:
         }
 
         self.videoToUse: str = ""
+
         self.windowSize: int = 30
 
         self.overwriteTranscriptData: bool = False
@@ -114,11 +120,11 @@ class configVars:
         """
 
         if not os.path.exists(".env"):
-            errorMsg = "No .env file found. Please configure your environment variables use the .env.sample file as a template."
-            logging.error(errorMsg)
-            sys.exit(errorMsg)
+            logging.error("No .env file found. Please configure your environment variables use the .env.sample file as a template.")
+            sys.exit("Missing .env file. Exiting...")
 
-        load_dotenv()
+        # Force the environment variables to be read from the .env file every time.
+        load_dotenv(".env", override=True)
 
         try:
             self.logLevel = str(os.environ.get("LOG_LEVEL", self.logLevel)).upper()
@@ -230,7 +236,7 @@ class configVars:
         )
 
         if False in envImportSuccess.values():
-            sys.exit("Exiting due to configuration parameter import problems.")
+            sys.exit("Configuration parameter import problems. Exiting...")
 
         # This checks to set data in the later stages to be overwritten if the earlier stages are set to be overwritten.
         if self.overwriteTranscriptData == True:
@@ -318,7 +324,7 @@ class OpenAIBot:
 
             except openai.AuthenticationError as e:
                 logging.error(f"Error Message: {e}")
-                sys.exit("Exiting due to invalid OpenAI credentials.")
+                sys.exit("Invalid OpenAI credentials. Exiting...")
             except openai.RateLimitError as e:
                 logging.error(f"Error Message: {e}")
                 logging.error("Rate limit hit. Pausing for a minute.")
@@ -339,7 +345,7 @@ class OpenAIBot:
             logging.error(
                 f"Failed to send message at max limit of {self.callMaxLimit} times."
             )
-            sys.exit("Exiting due to too many failed attempts.")
+            sys.exit("Too many failed attempts. Exiting...")
 
         elif callComplete:
             responseText = response.choices[0].message.content

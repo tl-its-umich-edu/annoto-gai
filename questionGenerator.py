@@ -5,6 +5,7 @@ import pandas as pd
 from utils import dataLoader, dataSaver
 from configData import OpenAIBot
 
+
 class QuestionData:
     """
     Represents a class for managing question data.
@@ -40,7 +41,6 @@ class QuestionData:
         """
         self.config = config
         self.videoData = None
-        self.topicModeller = None
 
         self.clusteredTopics = None
         self.dominantTopics = None
@@ -94,13 +94,37 @@ class QuestionData:
         """
         Loads the question data from a file.
         """
-        self.responseData = dataLoader(self.config, "questionData")
+        loadedData = dataLoader(self.config, "questionData")
+        if loadedData is None:
+            loadedData = [None] * 5
+        if len(loadedData) != 5:
+            logging.warning(
+                "Loaded data for Question Data is incomplete/broken. Data will be regenerated and saved."
+            )
+            loadedData = [None] * 5
+        (
+            self.clusteredTopics,
+            self.dominantTopics,
+            self.relevantText,
+            self.questionQueryText,
+            self.responseData,
+        ) = loadedData
 
     def saveQuestionData(self):
         """
         Saves the question data to a file.
         """
-        dataSaver(self.responseData, self.config, "questionData")
+        dataSaver(
+            (
+                self.clusteredTopics,
+                self.dominantTopics,
+                self.relevantText,
+                self.questionQueryText,
+                self.responseData,
+            ),
+            self.config,
+            "questionData",
+        )
 
     def getQuestionDataFromResponse(self):
         """
@@ -163,7 +187,7 @@ class QuestionData:
 
 
 # Using a manual overwrite option for debugging.
-def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
+def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=False):
     """
     Retrieves or generates question data based on the given configuration and topic modeller.
 
@@ -179,8 +203,6 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
         QuestionData: The question data object containing the generated or retrieved question data.
     """
     questionData = QuestionData(config)
-    questionData.initialize(topicModeller, videoData)
-
     if not config.overwriteQuestionData and not overwrite:
         questionData.makeQuestionData(load=True)
 
@@ -189,8 +211,15 @@ def retrieveQuestions(config, topicModeller, videoData=None, overwrite=False):
             logging.info(f"Question Data Count: {len(questionData.responseData)}")
             return questionData
 
-    logging.info("Generating Question Data...")
+    if topicModeller is None:
+        logging.error(
+            "No saved data was found, and Topic Modeller not provided in function call needed to generate Question Data."
+        )
+        sys.exit("Topic Modeller not provided. Exiting...")
+    else:
+        questionData.initialize(topicModeller, videoData)
 
+    logging.info("Generating Question Data...")
     questionData.makeQuestionData(load=False)
     questionData.saveQuestionData()
 
@@ -233,6 +262,12 @@ def getClusteredTopics(topicModeller, videoData=None):
         dominantTopic = group[1].iloc[0]["Topic"]
         if dominantTopic != -1:
             filteredGroups.append(group[1])
+
+    if len(filteredGroups) == 0:
+        logging.error(
+            "Relevant topics not found. This could happen if video is too short or BERTopic could not find any topics."
+        )
+        sys.exit("No relevant topics found. Exiting...")
 
     filteredGroupsDF = pd.concat(filteredGroups)
 
@@ -281,7 +316,7 @@ def getClusteredTopics(topicModeller, videoData=None):
     except Exception as e:
         logging.error(f"Error clustering topics: {e}")
         logging.error(f"Clustering error on Video: {videoData.config.videoToUse}")
-        sys.exit(f"Error clustering topics: {e}")
+        sys.exit(f"Topic clustering error. Exiting...")
 
     # We add the topic title for clarity in the final DataFrame.
     clusteredTopics["Topic Title"] = clusteredTopics["Topic"].apply(
@@ -291,8 +326,10 @@ def getClusteredTopics(topicModeller, videoData=None):
     )
 
     if clusteredTopics.shape[0] == 0:
-        logging.info("No clustered topics found. Exiting...")
-        sys.exit("No clustered topics found. Exiting...")
+        logging.info(
+            "No clustered topics found. This error should be unlikely and caused by a bug."
+        )
+        sys.exit("Topic clustering error. Exiting...")
 
     logging.info(f"Clustered Topics data shape: {clusteredTopics.shape}")
     logging.info(f"Clustered Topics head: {clusteredTopics.head(5)}")
@@ -319,7 +356,9 @@ def getDominantTopic(clusteredTopics):
     dominantTopics = pd.concat(dominantTopics).sort_values("Start")
 
     if dominantTopics.shape[0] == 0:
-        logging.error("No dominant topics found. Exiting...")
+        logging.error(
+            "No dominant topics found. This error should be unlikely and caused by a bug."
+        )
         sys.exit("No dominant topics found. Exiting...")
 
     logging.info(f"Dominant Topics data shape: {dominantTopics.shape}")
