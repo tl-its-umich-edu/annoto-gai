@@ -18,6 +18,7 @@ from numpy import seterr
 
 seterr(divide="ignore")
 
+
 class TopicModeller:
     """
     Class for performing topic modeling on video data.
@@ -181,8 +182,10 @@ class TopicModeller:
             fitSuccess = self.fitTopicModel()
 
         if not fitSuccess:
-            logging.error("Failed to fit the topic model. Exiting...")
-            sys.exit("Failed to fit the topic model. Exiting...")
+            logging.error(
+                "Failed to fit the topic model. PLease check logs for possible errors."
+            )
+            sys.exit("FTopic model fitting failed. Exiting...")
 
         if representationModelType == "langchain":
             self.tokenCount = cb.total_tokens
@@ -244,7 +247,9 @@ def retrieveTopics(config, videoData=None, overwrite=False):
     logging.info("Generating & saving Topic Model and Data...")
 
     if videoData is None:
-        logging.error("Video Data not provided. Exiting...")
+        logging.error(
+            "No saved data was found, and no video data was provided in function call needed to extract topics."
+        )
         sys.exit("Video Data not provided. Exiting...")
     else:
         topicModeller.intialize(videoData)

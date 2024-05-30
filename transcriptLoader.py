@@ -96,13 +96,13 @@ class TranscriptData:
             logging.error(
                 f"Captions folder not found. Created folder: {captionsFolder}."
             )
-            sys.exit("Captions folder not found. Exiting...")
+            sys.exit("Missing Captions parent folder. Exiting...")
 
         if not os.path.exists(os.path.join(captionsFolder, self.config.videoToUse)):
             logging.error(
                 f"Video folder not found for {self.config.videoToUse} in Caption folder {captionsFolder}."
             )
-            sys.exit("Captions folder not found. Exiting...")
+            sys.exit("Missing Video folder. Exiting...")
 
         srtFiles = glob.glob(
             os.path.join(captionsFolder, self.config.videoToUse, "*.srt")
@@ -186,9 +186,7 @@ def processSrtFiles(srtFiles, minTranscriptLength=minVideoLength):
         logging.error(
             f"Video transcript is less than {minTranscriptLength} seconds long and not suitable for processing. Exiting..."
         )
-        sys.exit(
-            f"Video transcript is less than {minTranscriptLength} seconds long and not suitable for processing. Exiting..."
-        )
+        sys.exit(f"Transcript too short. Exiting...")
 
     logging.info(f"Transcript data extracted from {srtFiles[0]}")
     logging.info(f"Transcript data shape: {transcriptDF.shape}")

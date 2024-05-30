@@ -212,7 +212,9 @@ def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=Fals
             return questionData
 
     if topicModeller is None:
-        logging.error("Topic Modeller not provided. Exiting...")
+        logging.error(
+            "No saved data was found, and Topic Modeller not provided in function call needed to generate Question Data."
+        )
         sys.exit("Topic Modeller not provided. Exiting...")
     else:
         questionData.initialize(topicModeller, videoData)
@@ -260,9 +262,11 @@ def getClusteredTopics(topicModeller, videoData=None):
         dominantTopic = group[1].iloc[0]["Topic"]
         if dominantTopic != -1:
             filteredGroups.append(group[1])
-            
+
     if len(filteredGroups) == 0:
-        logging.error("No relevant topics found. Exiting...")
+        logging.error(
+            "Relevant topics not found. This could happen if video is too short or BERTopic could not find any topics."
+        )
         sys.exit("No relevant topics found. Exiting...")
 
     filteredGroupsDF = pd.concat(filteredGroups)
@@ -312,7 +316,7 @@ def getClusteredTopics(topicModeller, videoData=None):
     except Exception as e:
         logging.error(f"Error clustering topics: {e}")
         logging.error(f"Clustering error on Video: {videoData.config.videoToUse}")
-        sys.exit(f"Error clustering topics: {e}")
+        sys.exit(f"Topic clustering error. Exiting...")
 
     # We add the topic title for clarity in the final DataFrame.
     clusteredTopics["Topic Title"] = clusteredTopics["Topic"].apply(
@@ -322,8 +326,10 @@ def getClusteredTopics(topicModeller, videoData=None):
     )
 
     if clusteredTopics.shape[0] == 0:
-        logging.info("No clustered topics found. Exiting...")
-        sys.exit("No clustered topics found. Exiting...")
+        logging.info(
+            "No clustered topics found. This error should be unlikely and caused by a bug."
+        )
+        sys.exit("Topic clustering error. Exiting...")
 
     logging.info(f"Clustered Topics data shape: {clusteredTopics.shape}")
     logging.info(f"Clustered Topics head: {clusteredTopics.head(5)}")
@@ -350,7 +356,9 @@ def getDominantTopic(clusteredTopics):
     dominantTopics = pd.concat(dominantTopics).sort_values("Start")
 
     if dominantTopics.shape[0] == 0:
-        logging.error("No dominant topics found. Exiting...")
+        logging.error(
+            "No dominant topics found. This error should be unlikely and caused by a bug."
+        )
         sys.exit("No dominant topics found. Exiting...")
 
     logging.info(f"Dominant Topics data shape: {dominantTopics.shape}")
