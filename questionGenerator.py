@@ -319,10 +319,14 @@ def getClusteredTopics(topicModeller, videoData=None):
         sys.exit(f"Topic clustering error. Exiting...")
 
     # We add the topic title for clarity in the final DataFrame.
+    getAllTopics = topicModeller.topicModel.get_topics()
+    topicList = {topicID: getAllTopics[topicID][0][0] for topicID in getAllTopics}
+
+    # This is to handle duplicate topics that share the same name, but have different subtopics.
+    cleanTopicList = modifyDuplicateTopics(topicList)
+    
     clusteredTopics["Topic Title"] = clusteredTopics["Topic"].apply(
-        lambda topic: topicModeller.topicModel.topic_labels_[topic]
-        .lstrip("0123456789_., ")
-        .rstrip("0123456789_., ")
+        lambda topic: cleanTopicList[topic]
     )
 
     if clusteredTopics.shape[0] == 0:
@@ -332,9 +336,40 @@ def getClusteredTopics(topicModeller, videoData=None):
         sys.exit("Topic clustering error. Exiting...")
 
     logging.info(f"Clustered Topics data shape: {clusteredTopics.shape}")
-    logging.info(f"Clustered Topics head: {clusteredTopics.head(5)}")
+    logging.info(f"Clustered Topics head:\n {clusteredTopics.head(3)}")
 
     return clusteredTopics
+
+
+def modifyDuplicateTopics(topicList):
+    """
+    Modifies a dictionary of topics to handle duplicate entries.
+
+    Args:
+        topicList (dict): A dictionary containing topics as keys.
+
+    Returns:
+        dict: The modified dictionary with duplicate topics modified.
+
+    Example:
+        >>> topicList = {'topic1': 'Python', 'topic2': 'Java', 'topic3': 'Python'}
+        >>> modifyDuplicateTopics(topicList)
+        {'topic1': 'Python #1', 'topic2': 'Java', 'topic3': 'Python #2'}
+    """
+    count = {}
+    firstDuplicate = {}
+    for key in list(topicList.keys()):
+        if topicList[key] in count:
+            if count[topicList[key]] == 1:
+                topicList[firstDuplicate[topicList[key]]] = (
+                    f"{topicList[firstDuplicate[topicList[key]]]} #1"
+                )
+            count[topicList[key]] += 1
+            topicList[key] = f"{topicList[key]} #{count[topicList[key]]}"
+        else:
+            count[topicList[key]] = 1
+            firstDuplicate[topicList[key]] = key
+    return topicList
 
 
 def getDominantTopic(clusteredTopics):
@@ -362,7 +397,7 @@ def getDominantTopic(clusteredTopics):
         sys.exit("No dominant topics found. Exiting...")
 
     logging.info(f"Dominant Topics data shape: {dominantTopics.shape}")
-    logging.info(f"Dominant Topics head: {dominantTopics.head(5)}")
+    logging.info(f"Dominant Topics head:\n {dominantTopics.head(3)}")
 
     return dominantTopics.set_index("Topic Title").to_dict(orient="index")
 
