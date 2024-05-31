@@ -10,3 +10,9 @@ pandas==2.2.2
 python-dotenv==1.0.1
 scikit_learn==1.4.2
 tiktoken
+spacy==3.7.4
+# spaCy has two components, the library itself, and the trained language model. 
+# The language model needs to be installed separately, and needs the download link to be specified. 
+# This is because there are numerous language models which can be used, and the user needs to specify which one they want to use.
+# Documentation: https://spacy.io/usage/models
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz

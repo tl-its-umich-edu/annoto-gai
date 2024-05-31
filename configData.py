@@ -25,6 +25,13 @@ representationModelType: str = "langchain"
 # Default is 300s.
 minVideoLength: int = 300
 
+# Because of how BERTopic works, there needs to be a minimum number of sentences per window of time.
+# When attempting to automatically segment the transcript into sentences using spaCy,
+# If there are sentences longer than this duration, the transcript data might not be suitable for this process.
+# Instead, the transcript will be segmented based on the `WINDOW_SIZE`.
+# Defaults to 120s, must be >=60.
+maxSentenceDuration = 120
+
 for folder in fileTypes:
     folderPath = os.path.join(saveFolder, folder)
     try:
@@ -120,7 +127,9 @@ class configVars:
         """
 
         if not os.path.exists(".env"):
-            logging.error("No .env file found. Please configure your environment variables use the .env.sample file as a template.")
+            logging.error(
+                "No .env file found. Please configure your environment variables use the .env.sample file as a template."
+            )
             sys.exit("Missing .env file. Exiting...")
 
         # Force the environment variables to be read from the .env file every time.

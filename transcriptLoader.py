@@ -4,8 +4,9 @@ import sys
 import logging
 import pandas as pd
 from datetime import datetime
-from configData import captionsFolder, minVideoLength
+from configData import captionsFolder, minVideoLength, maxSentenceDuration
 from utils import dataLoader, dataSaver
+import spacy
 
 
 class TranscriptData:
@@ -24,6 +25,7 @@ class TranscriptData:
         self.config = config
         self.srtFiles = None
         self.transcript = None
+        self.processedSentences = None
         self.combinedTranscript = None
 
     def initialize(self, config):
@@ -47,9 +49,17 @@ class TranscriptData:
         else:
             self.srtFiles = self.validateVideoFiles()
             self.transcript = processSrtFiles(self.srtFiles)
-            self.combinedTranscript = getCombinedTranscripts(
-                self.transcript, self.config.windowSize
-            )
+            self.processedSentences = getSentences(self.transcript)
+            
+            if self.processedSentences is not None:
+                self.combinedTranscript = getCombinedTranscripts(
+                    self.processedSentences, self.config.windowSize
+                )
+            else:
+                # Revert to simple segmentation
+                self.combinedTranscript = getCombinedTranscripts(
+                    self.transcript, self.config.windowSize
+                )
             self.saveTranscriptData()
 
     def loadTranscriptData(self):
@@ -58,15 +68,16 @@ class TranscriptData:
         """
         loadedData = dataLoader(self.config, "transcriptData")
         if loadedData is None:
-            loadedData = [None] * 3
-        elif type(loadedData) != tuple or len(loadedData) != 3:
+            loadedData = [None] * 4
+        elif type(loadedData) != tuple or len(loadedData) != 4:
             logging.warning(
                 "Loaded data for Transcript Data is incomplete/broken. Data will be regenerated and saved."
             )
-            loadedData = [None] * 3
+            loadedData = [None] * 4
         (
             self.srtFiles,
             self.transcript,
+            self.processedSentences,
             self.combinedTranscript,
         ) = loadedData
 
@@ -78,6 +89,7 @@ class TranscriptData:
             (
                 self.srtFiles,
                 self.transcript,
+                self.processedSentences,
                 self.combinedTranscript,
             ),
             self.config,
@@ -123,7 +135,7 @@ class TranscriptData:
             f"Processed transcript data shape: {self.combinedTranscript.shape}"
         )
         logging.info(
-            f"Processed transcript data head: {self.combinedTranscript.head(5)}"
+            f"Processed transcript data head:\n {self.combinedTranscript.head(3)}"
         )
 
 
@@ -190,9 +202,83 @@ def processSrtFiles(srtFiles, minTranscriptLength=minVideoLength):
 
     logging.info(f"Transcript data extracted from {srtFiles[0]}")
     logging.info(f"Transcript data shape: {transcriptDF.shape}")
-    logging.info(f"Transcript data head: {transcriptDF.head(5)}")
+    logging.info(f"Transcript data head:\n {transcriptDF.head(3)}")
 
     return transcriptDF
+
+
+def getSentences(transcript):
+    """
+    Extracts sentences from a transcript using the spaCy library.
+    It contains a sentence boundary detection model that can attempt to parse and segment text into sentences.
+    https://spacy.io/usage/linguistic-features#sbd
+
+    Args:
+        transcript (DataFrame): A pandas DataFrame containing the transcript data.
+
+    Returns:
+        DataFrame: A pandas DataFrame containing the extracted sentences with their start and end positions.
+    """
+    nlp = spacy.load("en_core_web_sm")
+
+    parsedLines = nlp(" ".join(transcript["Line"].tolist()))
+
+    startIndex, endIndex = 0, 1
+    pastSentence = ""
+    sentences = []
+    for sentence in parsedLines.sents:
+        sentenceMatched = False
+        sentence = nlp(pastSentence + sentence.text)
+
+        while not sentenceMatched and endIndex <= len(transcript):
+            rows = transcript.iloc[startIndex:endIndex]
+
+            if len(sentence.text) < len(" ".join(rows["Line"])):
+                pastSentence = sentence.text + " "
+                sentenceMatched = True
+            elif sentence.text == " ".join(rows["Line"]):
+                sentenceMatched = True
+                sentences.append(
+                    {
+                        "Line": sentence.text,
+                        "Start": transcript.iloc[startIndex]["Start"],
+                        "End": transcript.iloc[endIndex - 1]["End"],
+                    }
+                )
+                startIndex = endIndex
+                pastSentence = ""
+            else:
+                endIndex += 1
+
+    processedSentences = pd.DataFrame(sentences)
+
+    if validateProcessedSentences(processedSentences, maxSentenceDuration):
+        logging.info(f"Sentences data shape: {processedSentences.shape}")
+        logging.info(f"Sentences data head:\n {processedSentences.head(3)}")
+
+        return processedSentences
+    else:
+        return None
+
+
+def validateProcessedSentences(
+    processedSentences, maxSentenceDuration=maxSentenceDuration
+):
+    if processedSentences.shape[0] == 0:
+        logging.warn(
+            f"No sentences found in the transcript data. Reverting to simple segmentation.",
+        )
+        return False
+
+    sentenceDurations = processedSentences["End"] - processedSentences["Start"]
+    if sentenceDurations.max().seconds > maxSentenceDuration:
+        logging.warn(
+            f"Maximum sentence duration exceeds {maxSentenceDuration} seconds, indicating possibly bad transcription data. Reverting to simple segmentation.",
+        )
+        return False
+
+    logging.info(f"Transcript successfully segmented into sentences using spaCy.")
+    return True
 
 
 def getCombinedTranscripts(transcript, windowSize=30):
@@ -239,7 +325,7 @@ def getCombinedTranscripts(transcript, windowSize=30):
     logging.info(
         f"Combined Transcript data shape: {combinedTranscript.shape}",
     )
-    logging.info(f"Combined Transcript data head: {combinedTranscript.head(5)}")
+    logging.info(f"Combined Transcript data head:\n {combinedTranscript.head(3)}")
 
     return combinedTranscript
 
@@ -264,7 +350,7 @@ def retrieveTranscript(config, overwrite=False):
         if transcriptData.combinedTranscript is not None:
             logging.info("Transcript Data loaded from saved files.")
             logging.info(
-                f"Transcript Data Head: {transcriptData.combinedTranscript.head(5)}"
+                f"Transcript Data head:\n {transcriptData.combinedTranscript.head(3)}"
             )
             return transcriptData
 
