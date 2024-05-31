@@ -6,7 +6,7 @@ from langchain_community.callbacks import get_openai_callback
 import openai
 from bertopic import BERTopic
 from keybert import KeyBERT
-from configData import OpenAIBot, LangChainBot
+from configData import OpenAIBot, LangChainBot, useKeyBERT
 from utils import dataLoader, dataSaver, getBinCount
 from configData import representationModelType
 
@@ -60,7 +60,7 @@ class TopicModeller:
         else:
             vectorizerModel = (
                 getVectorizer(self.videoData.combinedTranscript)
-                if self.config.useKeyBERT
+                if useKeyBERT
                 else None
             )
             self.initializeRepresentationModel()
