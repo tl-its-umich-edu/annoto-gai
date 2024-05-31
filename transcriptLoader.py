@@ -219,9 +219,6 @@ def getSentences(transcript):
     Returns:
         DataFrame: A pandas DataFrame containing the extracted sentences with their start and end positions.
     """
-
-    # Download the spaCy model using the following command:
-    # python -m spacy download en_core_web_sm
     nlp = spacy.load("en_core_web_sm")
 
     parsedLines = nlp(" ".join(transcript["Line"].tolist()))
