@@ -280,7 +280,7 @@ def validateProcessedSentences(
         )
         return False
 
-    logging.info(f"Transcript successfully segmented into sentences.")
+    logging.info(f"Transcript successfully segmented into sentences using spaCy.")
     return True
 
 
