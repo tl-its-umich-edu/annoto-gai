@@ -3,9 +3,8 @@ This is the Github Project to Annoto GAI work.
 
 ## Initial setup: 
 1. Install required additonal libraries using `requirements.txt`.  
-2. Alongside installing the spaCy NLP library, you will need to download SpaCy's NLP model by running this command: `python -m spacy download en_core_web_sm`
-3. Use the `.env.sample` file in the `config` folder to create an `.env.` file to use with the needed credentials to use UM's OpenAI API.  
-4. For each video, create a folder in the `Captions` Folder, containing the corresponding .srt file within it. The first .srt file found in the subfolder will be used.  
+2. Use the `.env.sample` file in the `config` folder to create an `.env.` file to use with the needed credentials to use UM's OpenAI API.  
+3. For each video, create a folder in the `Captions` Folder, containing the corresponding .srt file within it. The first .srt file found in the subfolder will be used.  
 
 You can access videos from [MiVideo](https://www.mivideo.it.umich.edu/). It is recommended to use a video that is over 15 minutes long, and it must have .srt filetype captions available for it. Being familiar with the video contents can help in determining the utility and correctness of the topics extracted.
 
