@@ -1,9 +1,10 @@
 import json
+import os
 import sys
 import logging
 import pandas as pd
 from utils import dataLoader, dataSaver
-from configData import OpenAIBot
+from configData import OpenAIBot, outputFolder
 
 
 class QuestionData:
@@ -185,6 +186,86 @@ class QuestionData:
             f"Question Generation Token Count: {self.tokenCount}",
         )
 
+    def saveToFile(self):
+        """
+        Save the question data to a file.
+
+        Returns:
+            bool: True if the question data is successfully saved, False otherwise.
+        """
+        saveFolder = os.path.join(outputFolder, self.config.videoToUse)
+        try:
+            if not os.path.exists(saveFolder):
+                os.makedirs(saveFolder)
+        except OSError:
+            logging.warn(
+                f"Creation of the directory {saveFolder} failed. Data output will not be saved"
+            )
+            return False
+
+        questionSavePath = os.path.join(
+            outputFolder, self.config.videoToUse, "Questions.txt"
+        )
+        try:
+            with open(questionSavePath, "w") as f:
+                f.write(f"Video Name / Parent Folder: {self.config.videoToUse}\n")
+                for topic in self.responseData:
+                    response = self.responseData[topic]
+                    response = response.strip("` \n")
+                    if response.startswith("json"):
+                        response = response[4:]
+
+                    startTime = self.dominantTopics[topic]["Start"]
+                    endTime = self.dominantTopics[topic]["End"]
+                    durationMin, durationSec = divmod((endTime - startTime).total_seconds(), 60)
+
+                    f.write("\n---------------------------------------\n")
+                    f.write(f"Topic: {topic}\n")
+                    f.write(
+                        f"Transcipt Segment: {startTime.strftime('%H:%M:%S')}"
+                        + f" - {endTime.strftime('%H:%M:%S')}\n"
+                        + f"Duration: {int(durationMin)} minutes & {int(durationSec)} seconds\n"
+                    )
+                    f.write(
+                        f"Insert Point: {self.dominantTopics[topic]['End'].strftime('%H:%M:%S')}\n"
+                    )
+
+                    try:
+                        parsedResponse = json.loads(response)
+                        question = f"\nQuestion: {parsedResponse['question']}\n"
+                        answers = (
+                            "Answers: \n\t"
+                            + "\n\t".join(
+                                [
+                                    f"{i+1}. {item}"
+                                    for i, item in enumerate(parsedResponse["answers"])
+                                ]
+                            )
+                        )
+                        correct = f"Correct Answer: \n\t{parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
+                        reason = f"Reason: {parsedResponse['reason']}\n"
+                        f.write("\n".join([question, answers, correct, reason]))
+
+                    except json.JSONDecodeError as e:
+                        logging.warn(
+                            f"Error decoding JSON: {e} for received response: {parsedResponse}"
+                        )
+                        logging.warn(f"Question for topic: {topic} not generated.")
+
+                        response = (
+                            f"Error decoding JSON: {e} for received response: {parsedResponse}\n"
+                            + f"Question for topic: {topic} not generated.\n"
+                        )
+                        f.write(response)
+            logging.info(f"Question Data saved to file: {questionSavePath}")
+            return True
+        except OSError:
+            logging.warn(f"Failed to save question data to file: {questionSavePath}")
+            return False
+        except Exception as e:
+            logging.warn(f"Failed to save question data to file: {questionSavePath}")
+            logging.warn(f"Error: {e}")
+            return False
 
 # Using a manual overwrite option for debugging.
 def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=False):

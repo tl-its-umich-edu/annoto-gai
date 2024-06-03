@@ -18,6 +18,7 @@ logging.basicConfig(
 captionsFolder: str = "Captions"
 saveFolder: str = "savedData"
 fileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
+outputFolder: str = "Output Data"
 representationModelType: str = "langchain"
 
 # Toggle for using KeyBERT vectorization in the BERTopic Model. Default is True.
