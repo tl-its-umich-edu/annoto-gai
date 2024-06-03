@@ -196,6 +196,7 @@ class QuestionData:
         saveFolder = os.path.join(outputFolder, self.config.videoToUse)
         try:
             if not os.path.exists(saveFolder):
+                logging.info(f"Creating directory for Output: {saveFolder}")
                 os.makedirs(saveFolder)
         except OSError:
             logging.warn(
@@ -206,6 +207,7 @@ class QuestionData:
         questionSavePath = os.path.join(
             outputFolder, self.config.videoToUse, "Questions.txt"
         )
+        logging.info(f"Saving Question Data to file: {questionSavePath}")
         try:
             with open(questionSavePath, "w") as f:
                 f.write(f"Video Name / Parent Folder: {self.config.videoToUse}\n")
@@ -258,14 +260,11 @@ class QuestionData:
                         )
                         f.write(response)
             logging.info(f"Question Data saved to file: {questionSavePath}")
-            return True
         except OSError:
             logging.warn(f"Failed to save question data to file: {questionSavePath}")
-            return False
         except Exception as e:
             logging.warn(f"Failed to save question data to file: {questionSavePath}")
             logging.warn(f"Error: {e}")
-            return False
 
 # Using a manual overwrite option for debugging.
 def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=False):
