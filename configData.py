@@ -20,6 +20,9 @@ saveFolder: str = "savedData"
 fileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
 representationModelType: str = "langchain"
 
+# Toggle for using KeyBERT vectorization in the BERTopic Model. Default is True.
+useKeyBERT: bool = True
+
 # Minimum threshold for the video duration in seconds for processing.
 # Shorter videos might not have enough content to generate meaningful topics and questions.
 # Default is 300s.
@@ -212,16 +215,6 @@ class configVars:
         )
         envImportSuccess[self.overwriteQuestionData] = (
             False if type(self.overwriteQuestionData) is not bool else True
-        )
-
-        self.useKeyBERT = self.configFetch(
-            "USE_KEY_BERT",
-            self.useKeyBERT,
-            bool,
-            None,
-        )
-        envImportSuccess[self.useKeyBERT] = (
-            False if type(self.useKeyBERT) is not bool else True
         )
 
         self.langchainPrompt = self.configFetch(

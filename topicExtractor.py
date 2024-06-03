@@ -6,7 +6,7 @@ from langchain_community.callbacks import get_openai_callback
 import openai
 from bertopic import BERTopic
 from keybert import KeyBERT
-from configData import OpenAIBot, LangChainBot
+from configData import OpenAIBot, LangChainBot, useKeyBERT, maxSentenceDuration
 from utils import dataLoader, dataSaver, getBinCount
 from configData import representationModelType
 
@@ -34,10 +34,12 @@ class TopicModeller:
         self.OpenAIChatBot = None
         self.LangChainQABot = None
         self.representationModel = None
-        self.topicModel = None
-        self.topicsOverTime = None
         self.tokenCount = 0
         self.callMaxLimit = 3
+
+        self.topicModel = None
+        self.topics = None
+        self.topicsOverTime = None
 
     def intialize(self, videoData):
         """
@@ -58,13 +60,7 @@ class TopicModeller:
         if load:
             self.loadTopicModel()
         else:
-            vectorizerModel = (
-                getVectorizer(self.videoData.combinedTranscript)
-                if self.config.useKeyBERT
-                else None
-            )
             self.initializeRepresentationModel()
-            self.initializeTopicModel(vectorizerModel)
             self.getTopicsOverTime()
 
     def loadTopicModel(self):
@@ -114,7 +110,7 @@ class TopicModeller:
                 self.LangChainQABot.chain, prompt=self.LangChainQABot.prompt
             )
 
-    def initializeTopicModel(self, vectorizerModel=None):
+    def initializeTopicModel(self, vectorizerModel=None, clusterModel=None):
         """
         Initialize the topic model.
 
@@ -126,6 +122,12 @@ class TopicModeller:
                 representation_model=self.representationModel,
                 vectorizer_model=vectorizerModel,
             )
+        if clusterModel is not None:
+            self.topicModel = BERTopic(
+                representation_model=self.representationModel,
+                vectorizer_model=vectorizerModel,
+                hdbscan_model=clusterModel,
+            )
         else:
             self.topicModel = BERTopic(representation_model=self.representationModel)
 
@@ -135,20 +137,41 @@ class TopicModeller:
         """
         docs = self.videoData.combinedTranscript["Combined Lines"].tolist()
         timestamps = self.videoData.combinedTranscript["Start"].tolist()
+        vectorizerModel = (
+            getVectorizer(self.videoData.combinedTranscript) if useKeyBERT else None
+        )
 
         callAttemptCount = 0
         while callAttemptCount < self.callMaxLimit:
             try:
-                topics, probs = self.topicModel.fit_transform(docs)
+                self.initializeTopicModel(vectorizerModel)
+                self.topics, probs = self.topicModel.fit_transform(docs)
+                logging.info(f"Topics and probalities extracted from fitted successfully.")
 
+                if set(self.topics) == {-1}:
+                    logging.warning(
+                        "All topics are -1. Retrying with K-means clustering..."
+                    )
+                    # This import should not occur frequently, so we only call when it is needed.
+                    from sklearn.cluster import KMeans
+
+                    # We use 3 clusters as a default value. 
+                    # This means the transcript will be grouped into 3 topics.
+                    clusterModel = KMeans(n_clusters=3)
+                    self.initializeTopicModel(vectorizerModel, clusterModel)
+                    self.topics, probs = self.topicModel.fit_transform(docs)
+
+                # We use `maxSentenceDuration` to determine the number of bins.
+                # This ensures that bins will always have atleast one sentence in them.
                 binCount = getBinCount(
-                    self.videoData.combinedTranscript, windowSize=120
+                    self.videoData.combinedTranscript, windowSize=maxSentenceDuration
                 )
 
                 self.topicsOverTime = self.topicModel.topics_over_time(
                     docs, timestamps, nr_bins=binCount
                 )
 
+                logging.info(f"Topics over time extracted successfully.")
                 return True
 
             except openai.AuthenticationError as e:
@@ -257,7 +280,7 @@ def retrieveTopics(config, videoData=None, overwrite=False):
     topicModeller.saveTopicModel()
 
     logging.info(f"Topic Model and Data generated and saved for current configuration.")
-    logging.info(f"Topics over Time Head: {topicModeller.topicsOverTime.head(5)}")
+    logging.info(f"Topics over Time Head:\n {topicModeller.topicsOverTime.head(3)}")
     return topicModeller
 
 
