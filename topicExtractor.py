@@ -146,12 +146,12 @@ class TopicModeller:
             try:
                 self.initializeTopicModel(vectorizerModel)
                 self.topics, probs = self.topicModel.fit_transform(docs)
+                logging.info(f"Topics and probalities extracted from fitted successfully.")
 
                 if set(self.topics) == {-1}:
                     logging.warning(
                         "All topics are -1. Retrying with K-means clustering..."
                     )
-
                     # This import should not occur frequently, so we only call when it is needed.
                     from sklearn.cluster import KMeans
 
@@ -171,6 +171,7 @@ class TopicModeller:
                     docs, timestamps, nr_bins=binCount
                 )
 
+                logging.info(f"Topics over time extracted successfully.")
                 return True
 
             except openai.AuthenticationError as e:
