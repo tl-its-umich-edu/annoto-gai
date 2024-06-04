@@ -512,6 +512,17 @@ Return the data in the following JSON format as an example: {{"question": "What 
 
 
 def truncateRelevantText(dominantTopics, videoData, contextWindowSize=600):
+    """
+    Truncates the relevant text for each dominant topic based on the context window size.
+
+    Args:
+        dominantTopics (dict): A dictionary containing information about the dominant topics.
+        videoData (DataFrame): A DataFrame containing the combined transcript of the video.
+        contextWindowSize (int, optional): The size of the context window in seconds. Defaults to 600.
+
+    Returns:
+        dict: The updated dominantTopics dictionary with truncated relevant text.
+    """
     for topic in dominantTopics:
         relevantTextDuration = (
             dominantTopics[topic]["End"] - dominantTopics[topic]["Start"]
