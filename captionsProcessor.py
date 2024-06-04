@@ -21,6 +21,7 @@ def main():
     logging.info(f"Retrieving Questions for {config.videoToUse}...")
     questionData = retrieveQuestions(config, topicModeller, videoData)
     questionData.printQuestions()
+    questionData.saveToFile()
 
 
 if __name__ == "__main__":

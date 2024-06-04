@@ -34,6 +34,9 @@ A basic saving and loading functionality is also utilized to load in the model a
 This is also why the `TopicModeller` class can't be saved as single entity easily. Saving the model in it needs a different mechanism. 
 In a future implementation, the need for the model being saved itself could be removed, but I do not believe this is viable right now.
 
+#### Understanding the generated question data:
+Question data is saved to a folder with the same name in an output folder called `Output Data` as the corresponding folder from the `Captions` folder whose transcript was used to generate the data from. The file is called `Questions.txt`, and for a given video will list the Video/Folder Name, the Topic, the timestamps for the selected relevant text, insertion time for the question, and then the questions itself. The question generated will be a multiple choice type, with 4 questions, one of which is the correct. A reasoning is also provided for this answer to be the correct one. 
+
 #### Scripts used:
 Currently, 5 scripts are used:
 1. `configData.py`: Contains the `configVars` class used to store environmental variables, as well as two other classes for OpenAI and LangChain API usage.
