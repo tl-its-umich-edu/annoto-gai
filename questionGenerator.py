@@ -67,9 +67,15 @@ class QuestionData:
 
         self.clusteredTopics = getClusteredTopics(topicModeller, videoData)
         self.dominantTopics = getDominantTopic(self.clusteredTopics)
+
+        # Check if the contextWindowSize is set to 0, which means we do not want to truncate the relevant text.
+        if self.config.contextWindowSize != 0:
+            # Truncate the relevant text as needed based on the contextWindowSize.
+            self.dominantTopics = truncateRelevantText(
+                self.dominantTopics, self.videoData, self.config.contextWindowSize
+            )
         self.relevantText, self.questionQueryText = getTextAndQuestion(
-            self.dominantTopics, videoData
-        )
+            self.dominantTopics, self.videoData)
 
     def makeQuestionData(self, load=True):
         """
@@ -219,7 +225,9 @@ class QuestionData:
 
                     startTime = self.dominantTopics[topic]["Start"]
                     endTime = self.dominantTopics[topic]["End"]
-                    durationMin, durationSec = divmod((endTime - startTime).total_seconds(), 60)
+                    durationMin, durationSec = divmod(
+                        (endTime - startTime).total_seconds(), 60
+                    )
 
                     f.write("\n---------------------------------------\n")
                     f.write(f"Topic: {topic}\n")
@@ -235,14 +243,11 @@ class QuestionData:
                     try:
                         parsedResponse = json.loads(response)
                         question = f"\nQuestion: {parsedResponse['question']}\n"
-                        answers = (
-                            "Answers: \n\t"
-                            + "\n\t".join(
-                                [
-                                    f"{i+1}. {item}"
-                                    for i, item in enumerate(parsedResponse["answers"])
-                                ]
-                            )
+                        answers = "Answers: \n\t" + "\n\t".join(
+                            [
+                                f"{i+1}. {item}"
+                                for i, item in enumerate(parsedResponse["answers"])
+                            ]
                         )
                         correct = f"Correct Answer: \n\t{parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
                         reason = f"Reason: {parsedResponse['reason']}\n"
@@ -265,6 +270,7 @@ class QuestionData:
         except Exception as e:
             logging.warn(f"Failed to save question data to file: {questionSavePath}")
             logging.warn(f"Error: {e}")
+
 
 # Using a manual overwrite option for debugging.
 def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=False):
@@ -404,7 +410,7 @@ def getClusteredTopics(topicModeller, videoData=None):
 
     # This is to handle duplicate topics that share the same name, but have different subtopics.
     cleanTopicList = modifyDuplicateTopics(topicList)
-    
+
     clusteredTopics["Topic Title"] = clusteredTopics["Topic"].apply(
         lambda topic: cleanTopicList[topic]
     )
@@ -503,6 +509,48 @@ There should be four possible answers, with one being the correct answers. Also 
 Return the data in the following JSON format as an example: {{"question": "What is the capital of France?", "answers": ["Paris", "London", "Berlin", "Madrid"], "correct": "Paris", "reason": "Paris is the capital of France"}}"""
 
     return questionTask
+
+
+def truncateRelevantText(dominantTopics, videoData, contextWindowSize=600):
+    """
+    Truncates the relevant text for each dominant topic based on the context window size.
+
+    Args:
+        dominantTopics (dict): A dictionary containing information about the dominant topics.
+        videoData (DataFrame): A DataFrame containing the combined transcript of the video.
+        contextWindowSize (int, optional): The size of the context window in seconds. Defaults to 600.
+
+    Returns:
+        dict: The updated dominantTopics dictionary with truncated relevant text.
+    """
+    for topic in dominantTopics:
+        relevantTextDuration = (
+            dominantTopics[topic]["End"] - dominantTopics[topic]["Start"]
+        )
+
+        if contextWindowSize != 0 and relevantTextDuration > pd.Timedelta(
+            seconds=contextWindowSize
+        ):
+            logging.info(
+                f"Relevant text for Topic: {topic} is longer than context window size of {contextWindowSize} seconds. Truncating..."
+            )
+
+            # Find start of relevant truncated text
+            truncatedSentences = videoData.combinedTranscript[
+                (
+                    videoData.combinedTranscript["End"]
+                    >= (
+                        dominantTopics[topic]["End"]
+                        - pd.Timedelta(seconds=contextWindowSize)
+                    )
+                )
+            ]
+
+            # Store the original start time of the topic
+            dominantTopics[topic]["Original Start"] = dominantTopics[topic]["Start"]
+            dominantTopics[topic]["Start"] = truncatedSentences["Start"].min()
+
+    return dominantTopics
 
 
 def getTextAndQuestion(dominantTopics, videoData):

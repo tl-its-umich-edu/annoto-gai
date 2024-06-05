@@ -61,6 +61,7 @@ class configVars:
         self.videoToUse: str = ""
 
         self.windowSize: int = 30
+        self.contextWindowSize: int = 600
 
         self.overwriteTranscriptData: bool = False
         self.overwriteTopicModel: bool = False
@@ -187,6 +188,16 @@ class configVars:
             lambda x: x > 0,
         )
         envImportSuccess[self.windowSize] = False if not self.windowSize else True
+
+        self.contextWindowSize = self.configFetch(
+            "RELEVANT_TEXT_CONTEXT_WINDOW",
+            self.contextWindowSize,
+            int,
+            lambda x: x >= 0,
+        )
+        envImportSuccess[self.contextWindowSize] = (
+            False if self.contextWindowSize is None else True
+        )
 
         self.overwriteTranscriptData = self.configFetch(
             "OVERWRITE_EXISTING_TRANSCRIPT",
