@@ -231,6 +231,17 @@ class QuestionData:
 
                     f.write("\n---------------------------------------\n")
                     f.write(f"Topic: {topic}\n")
+
+                    # Retrieve the keywords for the topic.
+                    keywords = self.clusteredTopics[
+                        (self.clusteredTopics["Topic Title"] == topic)
+                        & (
+                            self.clusteredTopics["End"]
+                            == self.dominantTopics[topic]["End"]
+                        )
+                    ].squeeze()["Words"]
+                    f.write(f"Keywords: {keywords}\n\n")
+                    
                     f.write(
                         f"Transcipt Segment: {startTime.strftime('%H:%M:%S')}"
                         + f" - {endTime.strftime('%H:%M:%S')}\n"
