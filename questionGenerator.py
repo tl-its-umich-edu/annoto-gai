@@ -437,6 +437,7 @@ def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
 
     """
     if questionCount == -1:
+        # Retrieve one question per topic, by finding the text with the highest occurence of that topic.
         logging.info(f"No question count set. Retrieving one question per topic.")
         relevantRegions = []
         for group in clusteredTopics.groupby("Topic"):
@@ -446,6 +447,7 @@ def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
         relevantRegions = pd.concat(relevantRegions).sort_values("Start")
 
     else:
+        # Retrieve the relevant text regions sorted by frequency of topic occurence.
         logging.info(f"Identifying relevant text for {questionCount} questions.")
         sortedTopics = clusteredTopics.sort_values(
             ["Frequency", "Topic"], ascending=[False, True]
@@ -454,7 +456,8 @@ def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
 
         if questionCount > sortedTopics.shape[0]:
             logging.info(
-                f"Question count is greater than the number of regions with relevant text. {sortedTopics.shape[0]} questions will be generated instead."
+                f"Question count is greater than the number of regions with relevant text. 
+                {sortedTopics.shape[0]} questions will be generated instead."
             )
         relevantRegions = sortedTopics.head(questionCount)
 
