@@ -36,6 +36,11 @@ minVideoLength: int = 300
 # Defaults to 120s, must be >=60.
 maxSentenceDuration = 120
 
+# This sets the numbers of times a topic must appear in a given region of time to be considered a valid topic.
+# This is used to filter out topics that are not relevant to the video content.
+# Default is 2. Higher values will result in fewer questions possibly being generated.
+minTopicFrequency: int = 2
+
 for folder in fileTypes:
     folderPath = os.path.join(saveFolder, folder)
     try:
@@ -62,7 +67,8 @@ class configVars:
 
         self.windowSize: int = 30
         self.contextWindowSize: int = 600
-
+        self.questionCount: int = -1
+        
         self.overwriteTranscriptData: bool = False
         self.overwriteTopicModel: bool = False
         self.overwriteQuestionData: bool = False
@@ -180,6 +186,14 @@ class configVars:
                 lambda name: len(name) > 0,
             )
             envImportSuccess[self.videoToUse] = False if not self.videoToUse else True
+
+        self.questionCount = self.configFetch(
+            "QUESTION_COUNT",
+            self.questionCount,
+            int,
+            lambda x: x > 0 or x==-1,
+        )
+        envImportSuccess[self.questionCount] = False if not self.questionCount else True
 
         self.windowSize = self.configFetch(
             "WINDOW_SIZE",
