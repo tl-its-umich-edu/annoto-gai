@@ -9,28 +9,47 @@ from configData import OpenAIBot, outputFolder, minTopicFrequency
 
 class QuestionData:
     """
-    Represents a class for managing question data.
+    Represents a class for generating and managing question data.
 
     Attributes:
         config (str): The configuration for the question data.
         videoData (object): The video data object.
-        topicModeller (object): The topic modeller object.
-        clusteredTopics (list): The clustered topics.
-        dominantTopics (dict): The dominant topics.
-        relevantText (str): The relevant text.
-        questionQueryText (dict): The question query text.
-        responseData (dict): The response data.
-        tokenCount (int): The token count.
+        clusteredTopics (object): The clustered topics.
+        questionInfo (object): The question information.
+        responseInfo (object): The response information.
+        tokenCount (int): The token count for question generation.
 
     Methods:
         __init__(self, config, load=True): Initializes the QuestionData object.
-        initializeQuestionData(self, topicModeller, videoData=None): Initializes the question data.
+        initialize(self, topicModeller, videoData=None): Initializes the question data.
         makeQuestionData(self, load=True): Makes the question data.
         loadQuestionData(self): Loads the question data from a file.
         saveQuestionData(self): Saves the question data to a file.
-        getQuestionDataFromResponse(self): Generates the question data using the OpenAI chatbot.
-        printQuestions(self): Prints the question data.
+        printQuestions(self): Prints the generated questions, answers, correct answer, and reason for a given response.
+        printTokenCount(self): Prints the token count.
+        saveToFile(self): Saves the question data to a file.
     """
+
+    def __init__(self, config, load=True):
+        """
+        Initializes the QuestionData object.
+
+        Args:
+            config (str): The configuration for the question data.
+            load (bool, optional): Whether to load the question data. Defaults to True.
+        """
+        self.config = config
+        self.videoData = None
+
+        self.clusteredTopics = None
+        self.questionInfo = None
+
+        self.responseInfo = None
+        self.tokenCount = 0
+
+    # Rest of the code...
+class QuestionData:
+
 
     def __init__(self, config, load=True):
         """
@@ -134,7 +153,19 @@ class QuestionData:
 
     def printQuestions(self):
         """
-        Prints the question data.
+        Prints the generated questions, answers, correct answer, and reason for a given response.
+
+        This method iterates over the responseInfo DataFrame and processes each response to generate
+        questions and related information. It then logs the topic title, insert point, question,
+        answers, correct answer, and reason using the logging module.
+
+        Note:
+        - The responseInfo DataFrame should have the following columns: 'Response Data', 'Topic Title',
+          and 'End'.
+        - The 'Response Data' column should contain the response data in JSON format.
+
+        Returns:
+        None
         """
         for index, row in self.responseInfo.iterrows():
             response = row["Response Data"]
@@ -169,10 +200,14 @@ class QuestionData:
 
     def saveToFile(self):
         """
-        Save the question data to a file.
+        Saves the question data to a file.
+
+        This method creates a directory for the output if it doesn't exist,
+        and then saves the question data to a file named "Questions.txt" in
+        the output directory.
 
         Returns:
-            bool: True if the question data is successfully saved, False otherwise.
+            None
         """
         saveFolder = os.path.join(outputFolder, self.config.videoToUse)
         try:
@@ -183,8 +218,6 @@ class QuestionData:
             logging.warn(
                 f"Creation of the directory {saveFolder} failed. Data output will not be saved"
             )
-            return False
-
         questionSavePath = os.path.join(
             outputFolder, self.config.videoToUse, "Questions.txt"
         )
@@ -294,7 +327,6 @@ def getClusteredTopics(topicModeller, videoData=None):
     filteredTopics = filteredGroupsDF[filteredGroupsDF["Topic"] != -1]
 
     try:
-
         # We can merge any segments where the main topic is the same.
         # This gives the intuition that the same topic is being discussed over a period of time.
         clusteredTopics = (
@@ -389,11 +421,11 @@ def modifyDuplicateTopics(topicList):
 
 def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
     """
-    Retrieves relevant text regions based on clustered topics.
+    Retrieves relevant text regions based on the given parameters.
 
     Args:
-        clusteredTopics (DataFrame): A DataFrame containing clustered topics.
-        questionCount (int, optional): The number of questions to generate. If set to -1, one question per topic will be retrieved. Defaults to -1.
+        clusteredTopics (DataFrame): A DataFrame containing clustered topics and their frequencies.
+        questionCount (int, optional): The number of questions to generate. Defaults to -1.
         minFrequency (int, optional): The minimum frequency of a topic to be considered relevant. Defaults to 2.
 
     Returns:
@@ -403,12 +435,6 @@ def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
         SystemExit: If no relevant text regions are found.
 
     """
-    # Function implementation goes here
-    ...
-
-
-def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
-
     if questionCount == -1:
         logging.info(f"No question count set. Retrieving one question per topic.")
         relevantRegions = []
@@ -467,6 +493,17 @@ Return the data in the following JSON format as an example: {{"question": "What 
 
 
 def truncateRelevantText(relevantRegions, videoData, contextWindowSize=600):
+    """
+    Truncates the relevant text regions based on the context window size.
+
+    Args:
+        relevantRegions (pandas.DataFrame): DataFrame containing the relevant text regions.
+        videoData (pandas.DataFrame): DataFrame containing the video data.
+        contextWindowSize (int, optional): Size of the context window in seconds. Defaults to 600.
+
+    Returns:
+        pandas.DataFrame: DataFrame containing the truncated relevant text regions.
+    """
     truncatedRegions = []
     for index, region in relevantRegions.iterrows():
         relevantTextDuration = region["End"] - region["Start"]
@@ -556,6 +593,17 @@ def getQuestionDataFromResponse(questionInfo, OpenAIChatBot):
 
 
 def writeToFile(file, videoToUse, responseInfo):
+    """
+    Write information about response data to a file.
+
+    Args:
+        file (file object): The file object to write the information to.
+        videoToUse (str): The name of the video or parent folder.
+        responseInfo (pandas.DataFrame): The response data containing information about questions.
+
+    Returns:
+        None
+    """
     file.write(f"Video Name / Parent Folder: {videoToUse}\n")
     for index, row in responseInfo.iterrows():
         response = row["Response Data"]
@@ -583,7 +631,9 @@ def writeToFile(file, videoToUse, responseInfo):
             f"Duration: {int(durationMin)} minutes & {int(durationSec)} seconds\n"
         )
 
-        if type(row["Original Start"]) == type(row["Start"]):
+        if "Original Start" in row and type(row["Original Start"]) == type(
+            row["Start"]
+        ):
             trueDurationMin, trueDurationSec = divmod(
                 (endTime - row["Original Start"]).total_seconds(), 60
             )
