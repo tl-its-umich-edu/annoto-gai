@@ -48,8 +48,9 @@ class QuestionData:
         self.tokenCount = 0
 
     # Rest of the code...
-class QuestionData:
 
+
+class QuestionData:
 
     def __init__(self, config, load=True):
         """
@@ -466,7 +467,7 @@ def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
     logging.info(f"Relevant text regions data shape: {relevantRegions.shape}")
     logging.info(f"Relevant text regions head:\n {relevantRegions.head(3)}")
 
-    return relevantRegions
+    return relevantRegions.reset_index(drop=True)
 
 
 def questionTaskBuilder(topic, relevantText):
@@ -526,6 +527,13 @@ def truncateRelevantText(relevantRegions, videoData, contextWindowSize=600):
 
         truncatedRegions.append(region)
     truncatedRegions = pd.DataFrame(truncatedRegions)
+
+    if truncatedRegions.shape[0] == 0:
+        logging.error(
+            "Truncated data has no data. This error should be unlikely and caused by a bug."
+        )
+        sys.exit("No truncated text found. Exiting...")
+
     return truncatedRegions
 
 
@@ -556,7 +564,7 @@ def getTextAndQuery(relevantRegions, videoData):
         #     f"Relevant text selected for question - {index+1}: {relevantSentences}"
         # )
         logging.info(
-            f"Query to generate question for question - {index+1} - First 100 Characters: {questionQuery[:100]}"
+            f"Query to generate question for Question {index+1} - First 100 Characters: {questionQuery[:100]}"
         )
         textAndQuery.append((relevantSentences, questionQuery))
 
