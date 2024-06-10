@@ -6,7 +6,6 @@ import pandas as pd
 from utils import dataLoader, dataSaver
 from configData import OpenAIBot, outputFolder, minTopicFrequency
 
-
 class QuestionData:
     """
     Represents a class for generating and managing question data.
@@ -29,29 +28,6 @@ class QuestionData:
         printTokenCount(self): Prints the token count.
         saveToFile(self): Saves the question data to a file.
     """
-
-    def __init__(self, config, load=True):
-        """
-        Initializes the QuestionData object.
-
-        Args:
-            config (str): The configuration for the question data.
-            load (bool, optional): Whether to load the question data. Defaults to True.
-        """
-        self.config = config
-        self.videoData = None
-
-        self.clusteredTopics = None
-        self.questionInfo = None
-
-        self.responseInfo = None
-        self.tokenCount = 0
-
-    # Rest of the code...
-
-
-class QuestionData:
-
     def __init__(self, config, load=True):
         """
         Initializes the QuestionData object.
