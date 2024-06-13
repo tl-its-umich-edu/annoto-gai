@@ -432,8 +432,8 @@ def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
 
         if questionCount > sortedTopics.shape[0]:
             logging.info(
-                f"Question count is greater than the number of regions with relevant text. 
-                {sortedTopics.shape[0]} questions will be generated instead."
+                f"""Question count is greater than the number of regions with relevant text. 
+                {sortedTopics.shape[0]} questions will be generated instead."""
             )
         relevantRegions = sortedTopics.head(questionCount)
 
