@@ -4,34 +4,30 @@ import sys
 import logging
 import pandas as pd
 from utils import dataLoader, dataSaver
-from configData import OpenAIBot, outputFolder
-
+from configData import OpenAIBot, outputFolder, minTopicFrequency
 
 class QuestionData:
     """
-    Represents a class for managing question data.
+    Represents a class for generating and managing question data.
 
     Attributes:
         config (str): The configuration for the question data.
         videoData (object): The video data object.
-        topicModeller (object): The topic modeller object.
-        clusteredTopics (list): The clustered topics.
-        dominantTopics (dict): The dominant topics.
-        relevantText (str): The relevant text.
-        questionQueryText (dict): The question query text.
-        responseData (dict): The response data.
-        tokenCount (int): The token count.
+        clusteredTopics (object): The clustered topics.
+        questionInfo (object): The question information.
+        responseInfo (object): The response information.
+        tokenCount (int): The token count for question generation.
 
     Methods:
         __init__(self, config, load=True): Initializes the QuestionData object.
-        initializeQuestionData(self, topicModeller, videoData=None): Initializes the question data.
+        initialize(self, topicModeller, videoData=None): Initializes the question data.
         makeQuestionData(self, load=True): Makes the question data.
         loadQuestionData(self): Loads the question data from a file.
         saveQuestionData(self): Saves the question data to a file.
-        getQuestionDataFromResponse(self): Generates the question data using the OpenAI chatbot.
-        printQuestions(self): Prints the question data.
+        printQuestions(self): Prints the generated questions, answers, correct answer, and reason for a given response.
+        printTokenCount(self): Prints the token count.
+        saveToFile(self): Saves the question data to a file.
     """
-
     def __init__(self, config, load=True):
         """
         Initializes the QuestionData object.
@@ -44,11 +40,9 @@ class QuestionData:
         self.videoData = None
 
         self.clusteredTopics = None
-        self.dominantTopics = None
-        self.relevantText = None
+        self.questionInfo = None
 
-        self.questionQueryText = None
-        self.responseData = None
+        self.responseInfo = None
         self.tokenCount = 0
 
     def initialize(self, topicModeller, videoData=None):
@@ -66,16 +60,20 @@ class QuestionData:
             self.videoData = topicModeller.videoData
 
         self.clusteredTopics = getClusteredTopics(topicModeller, videoData)
-        self.dominantTopics = getDominantTopic(self.clusteredTopics)
+
+        # We don't track relevantRegions as questionInfo contains the same information.
+        relevantRegions = getRelevantRegions(
+            self.clusteredTopics, self.config.questionCount, minTopicFrequency
+        )
 
         # Check if the contextWindowSize is set to 0, which means we do not want to truncate the relevant text.
         if self.config.contextWindowSize != 0:
             # Truncate the relevant text as needed based on the contextWindowSize.
-            self.dominantTopics = truncateRelevantText(
-                self.dominantTopics, self.videoData, self.config.contextWindowSize
+            relevantRegions = truncateRelevantText(
+                relevantRegions, self.videoData, self.config.contextWindowSize
             )
-        self.relevantText, self.questionQueryText = getTextAndQuestion(
-            self.dominantTopics, self.videoData)
+
+        self.questionInfo = getTextAndQuery(relevantRegions, self.videoData)
 
     def makeQuestionData(self, load=True):
         """
@@ -88,13 +86,14 @@ class QuestionData:
             self.loadQuestionData()
         else:
             self.OpenAIChatBot = OpenAIBot(self.config)
-            self.getQuestionDataFromResponse()
+            self.responseInfo = getQuestionDataFromResponse(
+                self.questionInfo, self.OpenAIChatBot
+            )
 
             self.tokenCount = self.OpenAIChatBot.tokenUsage
             logging.info(
                 f"Question Generation Token Count: {self.tokenCount}",
             )
-
             self.saveQuestionData()
 
     def loadQuestionData(self):
@@ -103,18 +102,16 @@ class QuestionData:
         """
         loadedData = dataLoader(self.config, "questionData")
         if loadedData is None:
-            loadedData = [None] * 5
-        if len(loadedData) != 5:
+            loadedData = [None] * 3
+        if len(loadedData) != 3:
             logging.warning(
                 "Loaded data for Question Data is incomplete/broken. Data will be regenerated and saved."
             )
-            loadedData = [None] * 5
+            loadedData = [None] * 3
         (
             self.clusteredTopics,
-            self.dominantTopics,
-            self.relevantText,
-            self.questionQueryText,
-            self.responseData,
+            self.questionInfo,
+            self.responseInfo,
         ) = loadedData
 
     def saveQuestionData(self):
@@ -124,43 +121,31 @@ class QuestionData:
         dataSaver(
             (
                 self.clusteredTopics,
-                self.dominantTopics,
-                self.relevantText,
-                self.questionQueryText,
-                self.responseData,
+                self.questionInfo,
+                self.responseInfo,
             ),
             self.config,
             "questionData",
         )
 
-    def getQuestionDataFromResponse(self):
-        """
-        Generates the question data using the OpenAI chatbot.
-
-        This is because this is a much simpler task than the Topic Extraction part.
-        Using LangChain in BERTopic lets BERTopic handle a lot of the complexities in how the topics are generated by leveraging LangChain.
-        THat process involves passing keywords, relevant documents, and such to get the human-interpretable topics.
-
-        In the case of Question generation, we only need to send one query per question we need to generate.
-        We can get much finer control on the prompt directly because of the simpler query call made.
-
-        LangChain is just a complicated way of building the prompt and storing information at its fundamental level as well, it just hides it from us through abstraction.
-        This is a bot of an oversimplification, but it's a good way to think about it.
-        So in this case, it made sense to stick to an OpenAIBot for our call rather than using LangChain.
-
-        https://www.singlestore.com/blog/beginners-guide-to-langchain/
-        """
-        self.responseData = {}
-        for topic in self.questionQueryText:
-            response = self.OpenAIChatBot.getResponse(self.questionQueryText[topic])
-            self.responseData[topic] = response[0]
-
     def printQuestions(self):
         """
-        Prints the question data.
+        Prints the generated questions, answers, correct answer, and reason for a given response.
+
+        This method iterates over the responseInfo DataFrame and processes each response to generate
+        questions and related information. It then logs the topic title, insert point, question,
+        answers, correct answer, and reason using the logging module.
+
+        Note:
+        - The responseInfo DataFrame should have the following columns: 'Response Data', 'Topic Title',
+          and 'End'.
+        - The 'Response Data' column should contain the response data in JSON format.
+
+        Returns:
+        None
         """
-        for topic in self.responseData:
-            response = self.responseData[topic]
+        for index, row in self.responseInfo.iterrows():
+            response = row["Response Data"]
             response = response.strip("` \n")
             if response.startswith("json"):
                 response = response[4:]
@@ -171,13 +156,11 @@ class QuestionData:
                 logging.warn(
                     f"Error decoding JSON: {e} for received response: {parsedResponse}"
                 )
-                logging.warn(f"Question for topic: {topic} not generated.")
+                logging.warn(f"Question for topic: {row['Topic Title']} not generated.")
                 continue
 
-            logging.info(f"Topic: {topic}")
-            logging.info(
-                f"Insert Point: {self.dominantTopics[topic]['End'].strftime('%H:%M:%S')}"
-            )
+            logging.info(f"Topic: {row['Topic Title']}")
+            logging.info(f"Insert Point: {row['End'].strftime('%H:%M:%S')}")
             question = f"Question: {parsedResponse['question'][:100]+'...'}"
             answers = "Answers: " + "\n\t".join(parsedResponse["answers"])
             correct = f"Correct: {parsedResponse['correct']}"
@@ -194,10 +177,14 @@ class QuestionData:
 
     def saveToFile(self):
         """
-        Save the question data to a file.
+        Saves the question data to a file.
+
+        This method creates a directory for the output if it doesn't exist,
+        and then saves the question data to a file named "Questions.txt" in
+        the output directory.
 
         Returns:
-            bool: True if the question data is successfully saved, False otherwise.
+            None
         """
         saveFolder = os.path.join(outputFolder, self.config.videoToUse)
         try:
@@ -208,73 +195,13 @@ class QuestionData:
             logging.warn(
                 f"Creation of the directory {saveFolder} failed. Data output will not be saved"
             )
-            return False
-
         questionSavePath = os.path.join(
             outputFolder, self.config.videoToUse, "Questions.txt"
         )
         logging.info(f"Saving Question Data to file: {questionSavePath}")
         try:
-            with open(questionSavePath, "w") as f:
-                f.write(f"Video Name / Parent Folder: {self.config.videoToUse}\n")
-                for topic in self.responseData:
-                    response = self.responseData[topic]
-                    response = response.strip("` \n")
-                    if response.startswith("json"):
-                        response = response[4:]
-
-                    startTime = self.dominantTopics[topic]["Start"]
-                    endTime = self.dominantTopics[topic]["End"]
-                    durationMin, durationSec = divmod(
-                        (endTime - startTime).total_seconds(), 60
-                    )
-
-                    f.write("\n---------------------------------------\n")
-                    f.write(f"Topic: {topic}\n")
-
-                    # Retrieve the keywords for the topic.
-                    keywords = self.clusteredTopics[
-                        (self.clusteredTopics["Topic Title"] == topic)
-                        & (
-                            self.clusteredTopics["End"]
-                            == self.dominantTopics[topic]["End"]
-                        )
-                    ].squeeze()["Words"]
-                    f.write(f"Keywords: {keywords}\n\n")
-                    
-                    f.write(
-                        f"Transcipt Segment: {startTime.strftime('%H:%M:%S')}"
-                        + f" - {endTime.strftime('%H:%M:%S')}\n"
-                        + f"Duration: {int(durationMin)} minutes & {int(durationSec)} seconds\n"
-                    )
-                    f.write(
-                        f"Insert Point: {self.dominantTopics[topic]['End'].strftime('%H:%M:%S')}\n"
-                    )
-
-                    try:
-                        parsedResponse = json.loads(response)
-                        question = f"\nQuestion: {parsedResponse['question']}\n"
-                        answers = "Answers: \n\t" + "\n\t".join(
-                            [
-                                f"{i+1}. {item}"
-                                for i, item in enumerate(parsedResponse["answers"])
-                            ]
-                        )
-                        correct = f"Correct Answer: \n\t{parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
-                        reason = f"Reason: {parsedResponse['reason']}\n"
-                        f.write("\n".join([question, answers, correct, reason]))
-
-                    except json.JSONDecodeError as e:
-                        logging.warn(
-                            f"Error decoding JSON: {e} for received response: {parsedResponse}"
-                        )
-                        logging.warn(f"Question for topic: {topic} not generated.")
-
-                        response = (
-                            f"Error decoding JSON: {e} for received response: {parsedResponse}\n"
-                            + f"Question for topic: {topic} not generated.\n"
-                        )
-                        f.write(response)
+            with open(questionSavePath, "w") as file:
+                writeToFile(file, self.config.videoToUse, self.responseInfo)
             logging.info(f"Question Data saved to file: {questionSavePath}")
         except OSError:
             logging.warn(f"Failed to save question data to file: {questionSavePath}")
@@ -303,9 +230,9 @@ def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=Fals
     if not config.overwriteQuestionData and not overwrite:
         questionData.makeQuestionData(load=True)
 
-        if questionData.responseData is not None:
+        if questionData.responseInfo is not None:
             logging.info("Question Data loaded from saved files.")
-            logging.info(f"Question Data Count: {len(questionData.responseData)}")
+            logging.info(f"Question Data Count: {len(questionData.responseInfo)}")
             return questionData
 
     if topicModeller is None:
@@ -321,7 +248,7 @@ def retrieveQuestions(config, topicModeller=None, videoData=None, overwrite=Fals
     questionData.saveQuestionData()
 
     logging.info("Question Data generated and saved for current configuration.")
-    logging.info(f"Question Data Count: {len(questionData.responseData)}")
+    logging.info(f"Question Data Count: {len(questionData.responseInfo)}")
     return questionData
 
 
@@ -377,7 +304,6 @@ def getClusteredTopics(topicModeller, videoData=None):
     filteredTopics = filteredGroupsDF[filteredGroupsDF["Topic"] != -1]
 
     try:
-
         # We can merge any segments where the main topic is the same.
         # This gives the intuition that the same topic is being discussed over a period of time.
         clusteredTopics = (
@@ -396,7 +322,8 @@ def getClusteredTopics(topicModeller, videoData=None):
         )
 
         # We set the start and end times for each topic segment.
-        # As segments are linear, the start time is the timestamp of the first topic in the segment, and the end time is the timestamp of the next topic in the segment.
+        # As segments are linear, the start time is the timestamp of the first topic in the segment,
+        # And the end time is the timestamp of the next topic in the segment.
         # This tracks if multiple topics are covered in a single segment.
         clusteredTopics["Start"] = clusteredTopics["Timestamp"]
         clusteredTopics.at[clusteredTopics.index[0], "Start"] = (
@@ -469,34 +396,57 @@ def modifyDuplicateTopics(topicList):
     return topicList
 
 
-def getDominantTopic(clusteredTopics):
+def getRelevantRegions(clusteredTopics, questionCount=-1, minFrequency=2):
     """
-    Returns the dominant topics based on the frequency of occurrence.
+    Retrieves relevant text regions based on the given parameters.
 
-    Parameters:
-    clusteredTopics (DataFrame): A DataFrame containing clustered topics with columns "Topic" and "Frequency".
+    Args:
+        clusteredTopics (DataFrame): A DataFrame containing clustered topics and their frequencies.
+        questionCount (int, optional): The number of questions to generate. Defaults to -1.
+        minFrequency (int, optional): The minimum frequency of a topic to be considered relevant. Defaults to 2.
 
     Returns:
-    dominantTopics (DataFrame): A DataFrame containing the dominant topics sorted by start time.
+        DataFrame: A DataFrame containing the relevant text regions.
+
+    Raises:
+        SystemExit: If no relevant text regions are found.
+
     """
-    dominantTopics = []
-    for group in clusteredTopics.groupby("Topic"):
-        dominantTopics.append(
-            group[1].sort_values("Frequency", ascending=False).head(1)
+    if questionCount == -1:
+        # Retrieve one question per topic, by finding the text with the highest occurence of that topic.
+        logging.info(f"No question count set. Retrieving one question per topic.")
+        relevantRegions = []
+        for group in clusteredTopics.groupby("Topic"):
+            relevantRegions.append(
+                group[1].sort_values("Frequency", ascending=False).head(1)
+            )
+        relevantRegions = pd.concat(relevantRegions).sort_values("Start")
+
+    else:
+        # Retrieve the relevant text regions sorted by frequency of topic occurence.
+        logging.info(f"Identifying relevant text for {questionCount} questions.")
+        sortedTopics = clusteredTopics.sort_values(
+            ["Frequency", "Topic"], ascending=[False, True]
         )
+        sortedTopics = sortedTopics[sortedTopics["Frequency"] >= minFrequency]
 
-    dominantTopics = pd.concat(dominantTopics).sort_values("Start")
+        if questionCount > sortedTopics.shape[0]:
+            logging.info(
+                f"""Question count is greater than the number of regions with relevant text. 
+                {sortedTopics.shape[0]} questions will be generated instead."""
+            )
+        relevantRegions = sortedTopics.head(questionCount)
 
-    if dominantTopics.shape[0] == 0:
+    if relevantRegions.shape[0] == 0:
         logging.error(
-            "No dominant topics found. This error should be unlikely and caused by a bug."
+            "No relevant text regions found. This error should be unlikely and caused by a bug."
         )
-        sys.exit("No dominant topics found. Exiting...")
+        sys.exit("No relevant text regions found. Exiting...")
 
-    logging.info(f"Dominant Topics data shape: {dominantTopics.shape}")
-    logging.info(f"Dominant Topics head:\n {dominantTopics.head(3)}")
+    logging.info(f"Relevant text regions data shape: {relevantRegions.shape}")
+    logging.info(f"Relevant text regions head:\n {relevantRegions.head(3)}")
 
-    return dominantTopics.set_index("Topic Title").to_dict(orient="index")
+    return relevantRegions.reset_index(drop=True)
 
 
 def questionTaskBuilder(topic, relevantText):
@@ -522,77 +472,184 @@ Return the data in the following JSON format as an example: {{"question": "What 
     return questionTask
 
 
-def truncateRelevantText(dominantTopics, videoData, contextWindowSize=600):
+def truncateRelevantText(relevantRegions, videoData, contextWindowSize=600):
     """
-    Truncates the relevant text for each dominant topic based on the context window size.
+    Truncates the relevant text regions based on the context window size.
 
     Args:
-        dominantTopics (dict): A dictionary containing information about the dominant topics.
-        videoData (DataFrame): A DataFrame containing the combined transcript of the video.
-        contextWindowSize (int, optional): The size of the context window in seconds. Defaults to 600.
+        relevantRegions (pandas.DataFrame): DataFrame containing the relevant text regions.
+        videoData (pandas.DataFrame): DataFrame containing the video data.
+        contextWindowSize (int, optional): Size of the context window in seconds. Defaults to 600.
 
     Returns:
-        dict: The updated dominantTopics dictionary with truncated relevant text.
+        pandas.DataFrame: DataFrame containing the truncated relevant text regions.
     """
-    for topic in dominantTopics:
-        relevantTextDuration = (
-            dominantTopics[topic]["End"] - dominantTopics[topic]["Start"]
-        )
-
+    truncatedRegions = []
+    for index, region in relevantRegions.iterrows():
+        relevantTextDuration = region["End"] - region["Start"]
         if contextWindowSize != 0 and relevantTextDuration > pd.Timedelta(
             seconds=contextWindowSize
         ):
             logging.info(
-                f"Relevant text for Topic: {topic} is longer than context window size of {contextWindowSize} seconds. Truncating..."
+                f"Relevant text for Topic: {region['Topic Title']} is longer than context window size of {contextWindowSize} seconds. Truncating..."
             )
-
             # Find start of relevant truncated text
             truncatedSentences = videoData.combinedTranscript[
                 (
                     videoData.combinedTranscript["End"]
-                    >= (
-                        dominantTopics[topic]["End"]
-                        - pd.Timedelta(seconds=contextWindowSize)
-                    )
+                    >= (region["End"] - pd.Timedelta(seconds=contextWindowSize))
                 )
             ]
-
             # Store the original start time of the topic
-            dominantTopics[topic]["Original Start"] = dominantTopics[topic]["Start"]
-            dominantTopics[topic]["Start"] = truncatedSentences["Start"].min()
+            region["Original Start"] = region["Start"]
+            region["Start"] = truncatedSentences["Start"].min()
 
-    return dominantTopics
+        truncatedRegions.append(region)
+    truncatedRegions = pd.DataFrame(truncatedRegions)
+
+    if truncatedRegions.shape[0] == 0:
+        logging.error(
+            "Truncated data has no data. This error should be unlikely and caused by a bug."
+        )
+        sys.exit("No truncated text found. Exiting...")
+
+    return truncatedRegions
 
 
-def getTextAndQuestion(dominantTopics, videoData):
+def getTextAndQuery(relevantRegions, videoData):
     """
-    Retrieves relevant text from the combined transcript based on the given maxTopics.
+    Retrieves relevant text from the combined transcript based on the given relevantRegions.
 
     Args:
-        combinedTranscript (DataFrame): The combined transcript containing the relevant sentences.
-        maxTopics (dict): A dictionary containing the maxTopics and their corresponding start and end times.
+        relevantRegions (DataFrame): The relevant regions containing the relevant topics.
+        videoData (DataFrame): The combined transcript containing the relevant sentences.
 
     Returns:
-        dict: A modified version of the maxTopics dictionary with the relevant text and question text added.
+        dict: A dictionary containing the relevant text for each region.
     """
-    relevantText = {}
-    questionQueryText = {}
-    for topic in dominantTopics:
-        relevantSentences = videoData.combinedTranscript[
-            (videoData.combinedTranscript["Start"] >= dominantTopics[topic]["Start"])
-            & (videoData.combinedTranscript["End"] <= dominantTopics[topic]["End"])
+    textAndQuery = []
+    for index, region in relevantRegions.iterrows():
+        transcriptSlice = videoData.combinedTranscript[
+            (videoData.combinedTranscript["Start"] >= region["Start"])
+            & (videoData.combinedTranscript["End"] <= region["End"])
         ]
-        relevantText[topic] = " ".join(relevantSentences["Combined Lines"].tolist())
-        questionQueryText[topic] = questionTaskBuilder(topic, relevantText[topic])
+        relevantSentences = " ".join(transcriptSlice["Combined Lines"].tolist())
+        questionQuery = questionTaskBuilder(region["Topic Title"], relevantSentences)
 
         logging.info(
-            f"Time range for relevant text for Topic - {topic}: {dominantTopics[topic]['Start'].strftime('%H:%M:%S')} to {dominantTopics[topic]['End'].strftime('%H:%M:%S')}"
+            f"Time range for relevant text for question - {index+1}: {region['Start'].strftime('%H:%M:%S')} to {region['End'].strftime('%H:%M:%S')}"
         )
         # logging.info(
-        #     f"Relevant text selected for Topic - {topic}: {relevantText[topic]}"
+        #     f"Relevant text selected for question - {index+1}: {relevantSentences}"
         # )
         logging.info(
-            f"Query to generate question for Topic - {topic} - First 100 Characters: {questionQueryText[topic][:100]}"
+            f"Query to generate question for Question {index+1} - First 100 Characters: {questionQuery[:100]}"
+        )
+        textAndQuery.append((relevantSentences, questionQuery))
+
+    relevantRegions[["Relevant Text", "Question Query"]] = textAndQuery
+
+    return relevantRegions
+
+
+def getQuestionDataFromResponse(questionInfo, OpenAIChatBot):
+    """
+    Generates the question data using the OpenAI chatbot.
+
+    This is because this is a much simpler task than the Topic Extraction part.
+    Using LangChain in BERTopic lets BERTopic handle a lot of the complexities in how the topics are generated by leveraging LangChain.
+    THat process involves passing keywords, relevant documents, and such to get the human-interpretable topics.
+
+    In the case of Question generation, we only need to send one query per question we need to generate.
+    We can get much finer control on the prompt directly because of the simpler query call made.
+
+    LangChain is just a complicated way of building the prompt and storing information at its fundamental level as well.
+    It just hides it from us through abstraction. This is a bit of an oversimplification, but it's a good way to think about it.
+    So in this case, it made sense to stick to an OpenAIBot for our call rather than using LangChain.
+
+    https://www.singlestore.com/blog/beginners-guide-to-langchain/
+    """
+    responseInfo = questionInfo.copy(deep=True)
+    responseInfo["Response Data"] = None
+
+    for index, row in questionInfo.iterrows():
+        response = OpenAIChatBot.getResponse(row["Question Query"])
+        responseInfo["Response Data"][index] = response[0]
+
+    return responseInfo.reset_index(drop=True)
+
+
+def writeToFile(file, videoToUse, responseInfo):
+    """
+    Write information about response data to a file.
+
+    Args:
+        file (file object): The file object to write the information to.
+        videoToUse (str): The name of the video or parent folder.
+        responseInfo (pandas.DataFrame): The response data containing information about questions.
+
+    Returns:
+        None
+    """
+    file.write(f"Video Name / Parent Folder: {videoToUse}\n")
+    for index, row in responseInfo.iterrows():
+        response = row["Response Data"]
+        response = response.strip("` \n")
+        if response.startswith("json"):
+            response = response[4:]
+
+        startTime = row["Start"]
+        endTime = row["End"]
+        durationMin, durationSec = divmod((endTime - startTime).total_seconds(), 60)
+
+        file.write("\n---------------------------------------\n")
+        file.write(f"Question {index+1}\n")
+        file.write(f"Topic: {row['Topic Title']}\n")
+
+        # Retrieve the keywords for the topic.
+        keywords = row["Words"]
+        file.write(f"Keywords: {keywords}\n\n")
+
+        file.write(
+            f"Transcipt Segment: {startTime.strftime('%H:%M:%S')}"
+            + f" - {endTime.strftime('%H:%M:%S')}\n"
+        )
+        file.write(
+            f"Duration: {int(durationMin)} minutes & {int(durationSec)} seconds\n"
         )
 
-    return relevantText, questionQueryText
+        if "Original Start" in row and type(row["Original Start"]) == type(
+            row["Start"]
+        ):
+            trueDurationMin, trueDurationSec = divmod(
+                (endTime - row["Original Start"]).total_seconds(), 60
+            )
+            file.write(
+                f"\tTruncated from original duration of {int(trueDurationMin)} minutes & {int(trueDurationSec)} seconds\n"
+            )
+
+        file.write(f"Insert Point: {row['End'].strftime('%H:%M:%S')}\n")
+
+        try:
+            parsedResponse = json.loads(response)
+            question = f"\nQuestion: {parsedResponse['question']}\n"
+            answers = "Answers: \n\t" + "\n\t".join(
+                [f"{i+1}. {item}" for i, item in enumerate(parsedResponse["answers"])]
+            )
+            correct = f"Correct Answer: \n\t{parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
+            reason = f"Reason: {parsedResponse['reason']}\n"
+            file.write("\n".join([question, answers, correct, reason]))
+
+        except json.JSONDecodeError as e:
+            logging.warn(
+                f"Error decoding JSON: {e} for received response: {parsedResponse}"
+            )
+            logging.warn(
+                f"Question {index+1} for topic: {row['Topic Title']} not generated."
+            )
+
+            response = (
+                f"Error decoding JSON: {e} for received response: {parsedResponse}\n"
+                + f"Question {index+1} for topic: {row['Topic Title']} not generated.\n"
+            )
+            file.write(response)
