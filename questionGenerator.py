@@ -9,6 +9,19 @@ from LangChainQuestionGenerator import retrieveLangChainQuestions
 def retrieveQuestions(
     config, topicModeller=None, videoData=None, overwrite=False, saveToFile=True
 ):
+    """
+    Retrieves questions based on the specified generation model.
+
+    Args:
+        config (object): Configuration object containing generation model information.
+        topicModeller (object, optional): Topic modeller object. Defaults to None.
+        videoData (object, optional): Video data object. Defaults to None.
+        overwrite (bool, optional): Flag indicating whether to overwrite existing data. Defaults to False.
+        saveToFile (bool, optional): Flag indicating whether to save the question data to a file. Defaults to True.
+
+    Returns:
+        object: Question data object.
+    """
     if config.generationModel == "BERTopic":
         questionData = retrieveBERTopicQuestions(
             config,
@@ -32,6 +45,17 @@ def retrieveQuestions(
 
 
 def processCaptions(config, overwrite=False, saveToFile=True):
+    """
+    Process captions to retrieve transcript, topics, and questions for a given video.
+
+    Args:
+        config (object): Configuration object containing video information.
+        overwrite (bool, optional): Flag indicating whether to overwrite existing data. Defaults to False.
+        saveToFile (bool, optional): Flag indicating whether to save the questions to a file. Defaults to True.
+
+    Returns:
+        None
+    """
     logging.info(f"Retrieving Transcript for {config.videoToUse}...")
     videoData = retrieveTranscript(config, overwrite=overwrite)
 

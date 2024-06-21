@@ -13,16 +13,27 @@ from langchain_community.document_loaders import DataFrameLoader
 
 
 class Question(BaseModel):
-    "Question Details"
+    """
+    Represents a question formed by the model.
 
+    Attributes:
+        question (str): The question formed by the model.
+        answers (List[str]): List of 4 possible answers to the question formed.
+        correctAnswerIndex (int): Index of the correct answer to the question formed.
+        reason (str): Explanation for the correct answer to the question formed.
+        topic (str): Topic of the question formed.
+        insertionTime (str): Timestamp at which the question is to be inserted within a transcript,
+                             which is at the end of a relevant transcript section.
+        citations (List[int]): The integer IDs of the specific sources which were used to form the question.
+    """
     question: str = Field(title="Question", description="Question formed by the model.")
     answers: List[str] = Field(
         title="Answers",
-        description="List of 4 possible answers to the question formed .",
+        description="List of 4 possible answers to the question formed.",
     )
     correctAnswerIndex: int = Field(
         title="Correct Answer Index",
-        description="Index of the correct answer to the question formed .",
+        description="Index of the correct answer to the question formed.",
     )
     reason: str = Field(
         title="Reason",
@@ -40,7 +51,9 @@ class Question(BaseModel):
 
 
 class Questions(BaseModel):
-    "List of formed Questions"
+    """
+    Represents a collection of questions formed for a given transcript.
+    """
 
     questions: List[Question] = Field(
         title="Questions",
@@ -202,7 +215,17 @@ class LangChainQuestionData:
 
 
 def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
+    """
+    Retrieves language chain questions based on the provided configuration and video data.
 
+    Args:
+        config (Config): The configuration object containing the settings for question generation.
+        videoData (VideoData, optional): The video data object containing information about the video. Defaults to None.
+        overwrite (bool, optional): Whether to overwrite existing question data. Defaults to False.
+
+    Returns:
+        LangChainQuestionData: The generated language chain question data.
+    """
     questionData = LangChainQuestionData(config)
     if not config.overwriteQuestionData and not overwrite:
         questionData.makeQuestionData(load=True)
@@ -230,6 +253,17 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
 
 
 def makeRetriever(transcript, embeddings) -> Chroma:
+    """
+    Creates a retriever object using the given transcript and embeddings.
+
+    Args:
+        transcript (str): The transcript to be used for creating the retriever.
+        embeddings: The embeddings to be used for creating the retriever.
+
+    Returns:
+        Chroma: The retriever object.
+
+    """
     transcript = getMetadata(transcript)
     loader = DataFrameLoader(transcript, page_content_column="Combined Lines")
     vectorstore = Chroma.from_documents(documents=loader.load(), embedding=embeddings)
@@ -238,6 +272,22 @@ def makeRetriever(transcript, embeddings) -> Chroma:
 
 
 def makeRunnable(retriever, client):
+    """
+    Creates a runnable object that generates multiple-choice questions based on a provided transcription text.
+
+    Args:
+        retriever: The retriever object used to extract relevant information from the transcription text.
+        client: The client object used to generate the multiple-choice questions.
+
+    Returns:
+        A runnable object that can be executed to generate multiple-choice questions.
+
+    Example usage:
+        retriever = ...
+        client = ...
+        runnable = makeRunnable(retriever, client)
+        questions = runnable.invoke(f"{questionCount}")
+    """
     template = """You are a question-generating algorithm.
                 Only extract relevant information from the provided trancription text: {context}
                 Generate {count} Multiple-Choice Questions with 4 possible answers for each question, and provide a reason for the correct answer.
@@ -255,6 +305,17 @@ def makeRunnable(retriever, client):
 
 
 def writeLangChainDataToFile(file, videoName, responseInfo):
+    """
+    Writes the language chain data to a file.
+
+    Args:
+        file (file): The file object to write the data to.
+        videoName (str): The name of the video or parent folder.
+        responseInfo (ResponseInfo): The response information containing the questions.
+
+    Returns:
+        None
+    """
     file.write(f"Video Name / Parent Folder: {videoName}\n")
     for index, question in enumerate(responseInfo.questions):
         file.write("\n---------------------------------------\n")
