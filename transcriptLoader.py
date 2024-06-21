@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 from datetime import datetime
 from configData import captionsFolder, minVideoLength, maxSentenceDuration
-from utils import dataLoader, dataSaver
+from utils import dataLoader, dataSaver, getMetadata
 import spacy
 
 
@@ -60,7 +60,6 @@ class TranscriptData:
                 self.combinedTranscript = getCombinedTranscripts(
                     self.transcript, self.config.windowSize
                 )
-            self.saveTranscriptData()
 
     def loadTranscriptData(self):
         """
@@ -356,5 +355,6 @@ def retrieveTranscript(config, overwrite=False):
 
     logging.info("Generating & saving Transcript Data...")
     transcriptData.makeTranscriptData(load=False)
+    transcriptData.saveTranscriptData()
 
     return transcriptData
