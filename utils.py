@@ -2,7 +2,10 @@ import os
 import pickle
 import logging
 from bertopic import BERTopic
-from configData import representationModelType, saveFolder
+from typing import List
+from langchain_core.documents import Document
+from configData import representationModelType, saveFolder, useKeyBERT
+
 
 def dataSaver(data, config, dataType, saveNameAppend=""):
     """
@@ -17,7 +20,7 @@ def dataSaver(data, config, dataType, saveNameAppend=""):
     Returns:
         The path where the data is saved.
     """
-    if config.useKeyBERT:
+    if useKeyBERT and config.generationModel == "BERTopic":
         saveNameAppend = f"_KeyBERT{saveNameAppend}"
     saveName = f"{config.videoToUse}_{representationModelType}{saveNameAppend}"
     savePath = os.path.join(saveFolder, dataType, saveName)
@@ -53,9 +56,9 @@ def dataLoader(config, dataType, saveNameAppend=""):
     Returns:
     - The loaded data if it exists, otherwise False.
     """
-    if config.useKeyBERT:
+    if useKeyBERT and config.generationModel == "BERTopic":
         saveNameAppend = f"_KeyBERT{saveNameAppend}"
-    if dataType in ["transcriptData", "topicsOverTime", "questionData"]:
+    if dataType != "topicModel":
         saveNameAppend = f"{saveNameAppend}.p"
 
     saveName = f"{config.videoToUse}_{representationModelType}{saveNameAppend}"
@@ -89,3 +92,34 @@ def getBinCount(combinedTranscript, windowSize=120):
     )
     binCount = int(videoDuration.total_seconds() // windowSize)
     return binCount
+
+
+def formatDocs(docs: List[Document]) -> str:
+    """Convert Documents to a single string.:"""
+    formatted = [
+        f"Text ID: {doc.metadata['ID']}"
+        + f"\nText Start Time: {doc.metadata['Start']}"
+        + f"\nText End Time: {doc.metadata['End']}"
+        + f"\nText: {doc.page_content}"
+        for doc in docs
+    ]
+    return "\n\n" + "\n\n".join(formatted)
+
+
+def getMetadata(transcript):
+    """
+    Converts the timestamps in the transcript dataframe to a specific format and adds an 'ID' column.
+
+    Args:
+        transcript (pandas.DataFrame): The transcript dataframe containing 'Start' and 'End' columns.
+
+    Returns:
+        pandas.DataFrame: The modified transcript dataframe with converted timestamps and an added 'ID' column.
+    """
+    for timeCol in ["Start", "End"]:
+        transcript[timeCol] = transcript[timeCol].apply(
+            lambda timestamp: timestamp.strftime("%H:%M:%S")
+        )
+    transcript["ID"] = transcript.index
+
+    return transcript

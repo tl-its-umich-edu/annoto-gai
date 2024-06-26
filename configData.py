@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import openai
 from openai import AzureOpenAI
 from langchain.chains.question_answering import load_qa_chain
-from langchain_openai import AzureChatOpenAI as langchainAzureOpenAI
+from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)-4s [%(filename)s:%(lineno)d] - %(message)s",
@@ -17,7 +17,7 @@ logging.basicConfig(
 
 captionsFolder: str = "Captions"
 saveFolder: str = "savedData"
-fileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
+savedFileTypes = ["transcriptData", "topicModel", "topicsOverTime", "questionData"]
 outputFolder: str = "Output Data"
 representationModelType: str = "langchain"
 
@@ -41,7 +41,7 @@ maxSentenceDuration = 120
 # Default is 2. Higher values will result in fewer questions possibly being generated.
 minTopicFrequency: int = 2
 
-for folder in fileTypes:
+for folder in savedFileTypes:
     folderPath = os.path.join(saveFolder, folder)
     try:
         if not os.path.exists(folderPath):
@@ -64,16 +64,17 @@ class configVars:
         }
 
         self.videoToUse: str = ""
+        self.questionCount: int = 3
+        self.generationModel: str = "BERTopic"
+        self.envImportSuccess: dict = {}
 
+        # BERTopic-specific Parameters
         self.windowSize: int = 30
         self.contextWindowSize: int = 600
-        self.questionCount: int = -1
-        
+
         self.overwriteTranscriptData: bool = False
         self.overwriteTopicModel: bool = False
         self.overwriteQuestionData: bool = False
-
-        self.useKeyBERT: bool = True
 
         self.langchainPrompt: str = (
             "Give a single label that is only a few words long to summarize what these documents are about."
@@ -135,8 +136,15 @@ class configVars:
     def setFromEnv(self):
         """
         Set configuration parameters from environment variables.
-        """
 
+        This method reads configuration parameters from environment variables and sets them in the object.
+        It also performs validation and error handling for the configuration parameters.
+
+        Raises:
+            ValueError: If there is a casting error or validation error for any configuration parameter.
+            FileNotFoundError: If the .env file is missing.
+
+        """
         if not os.path.exists(".env"):
             logging.error(
                 "No .env file found. Please configure your environment variables use the .env.sample file as a template."
@@ -160,7 +168,6 @@ class configVars:
 
         # Currently the code will check and validate all config variables before stopping.
         # Reduces the number of runs needed to validate the config variables.
-        envImportSuccess = {}
 
         for credPart in self.openAIParams:
             if credPart == "BASE":
@@ -174,7 +181,7 @@ class configVars:
                 str,
                 lambda param: len(param) > 0,
             )
-            envImportSuccess[self.openAIParams[credPart]] = (
+            self.envImportSuccess[self.openAIParams[credPart]] = (
                 False if not self.openAIParams[credPart] else True
             )
 
@@ -185,23 +192,86 @@ class configVars:
                 str,
                 lambda name: len(name) > 0,
             )
-            envImportSuccess[self.videoToUse] = False if not self.videoToUse else True
+            self.envImportSuccess[self.videoToUse] = (
+                False if not self.videoToUse else True
+            )
 
         self.questionCount = self.configFetch(
             "QUESTION_COUNT",
             self.questionCount,
             int,
-            lambda x: x > 0 or x==-1,
+            lambda x: x > 0 or x == -1,
         )
-        envImportSuccess[self.questionCount] = False if not self.questionCount else True
+        self.envImportSuccess[self.questionCount] = (
+            False if not self.questionCount else True
+        )
 
+        self.generationModel = self.configFetch(
+            "GENERATION_MODEL",
+            self.generationModel,
+            str,
+            lambda model: model.lower() in ["bertopic", "langchain"],
+        )
+        # This should allow for the model to be set to either 'BERTopic' or 'LangChain' in the .env file without being case-sensitive. 
+        if self.generationModel:
+            self.generationModel = {'bertopic': 'BERTopic', 'langchain': 'LangChain'}.get(self.generationModel.lower(), None)
+        self.envImportSuccess[self.generationModel] = (
+            False if not self.generationModel else True
+        )
+
+        self.overwriteTranscriptData = self.configFetch(
+            "OVERWRITE_EXISTING_TRANSCRIPT",
+            self.overwriteTranscriptData,
+            bool,
+            None,
+        )
+        self.envImportSuccess[self.overwriteTranscriptData] = (
+            False if type(self.overwriteTranscriptData) is not bool else True
+        )
+
+        self.overwriteQuestionData = self.configFetch(
+            "OVERWRITE_EXISTING_QUESTIONS",
+            self.overwriteQuestionData,
+            bool,
+            None,
+        )
+        self.envImportSuccess[self.overwriteQuestionData] = (
+            False if type(self.overwriteQuestionData) is not bool else True
+        )
+
+        if self.overwriteTranscriptData == True:
+            self.overwriteQuestionData = True
+            logging.info(
+                "Generated Question data will also be overwritten as Transcript data is being overwritten."
+            )
+
+        # Pushed BERTopic variables out to a seperate method to keep the main method clean.
+        if self.generationModel == "BERTopic":
+            self.setBERTopicVarsFromEnv()
+
+        if False in self.envImportSuccess.values():
+            sys.exit("Configuration parameter import problems. Exiting...")
+
+        logging.info("All configuration parameters set up successfully.")
+
+    def setBERTopicVarsFromEnv(self):
+        """
+        Sets the BERTopic variables from the environment configuration.
+
+        This method fetches the values of various BERTopic variables from the environment configuration.
+        It validates the fetched values and updates the corresponding instance variables.
+        It also updates the `envImportSuccess` dictionary to indicate whether the import was successful for each variable.
+
+        Returns:
+            None
+        """
         self.windowSize = self.configFetch(
             "WINDOW_SIZE",
             self.windowSize,
             int,
             lambda x: x > 0,
         )
-        envImportSuccess[self.windowSize] = False if not self.windowSize else True
+        self.envImportSuccess[self.windowSize] = False if not self.windowSize else True
 
         self.contextWindowSize = self.configFetch(
             "RELEVANT_TEXT_CONTEXT_WINDOW",
@@ -209,7 +279,7 @@ class configVars:
             int,
             lambda x: x >= 0,
         )
-        envImportSuccess[self.contextWindowSize] = (
+        self.envImportSuccess[self.contextWindowSize] = (
             False if self.contextWindowSize is None else True
         )
 
@@ -219,18 +289,8 @@ class configVars:
             bool,
             None,
         )
-        envImportSuccess[self.overwriteTranscriptData] = (
+        self.envImportSuccess[self.overwriteTranscriptData] = (
             False if type(self.overwriteTranscriptData) is not bool else True
-        )
-
-        self.overwriteTopicModel = self.configFetch(
-            "OVERWRITE_EXISTING_TOPICMODEL",
-            self.overwriteTopicModel,
-            bool,
-            None,
-        )
-        envImportSuccess[self.overwriteTopicModel] = (
-            False if type(self.overwriteTopicModel) is not bool else True
         )
 
         self.overwriteQuestionData = self.configFetch(
@@ -239,7 +299,7 @@ class configVars:
             bool,
             None,
         )
-        envImportSuccess[self.overwriteQuestionData] = (
+        self.envImportSuccess[self.overwriteQuestionData] = (
             False if type(self.overwriteQuestionData) is not bool else True
         )
 
@@ -249,7 +309,7 @@ class configVars:
             str,
             lambda prompt: len(prompt) > 0,
         )
-        envImportSuccess[self.langchainPrompt] = (
+        self.envImportSuccess[self.langchainPrompt] = (
             False if not self.langchainPrompt else True
         )
 
@@ -259,12 +319,9 @@ class configVars:
             str,
             lambda prompt: len(prompt) > 0,
         )
-        envImportSuccess[self.questionPrompt] = (
+        self.envImportSuccess[self.questionPrompt] = (
             False if not self.questionPrompt else True
         )
-
-        if False in envImportSuccess.values():
-            sys.exit("Configuration parameter import problems. Exiting...")
 
         # This checks to set data in the later stages to be overwritten if the earlier stages are set to be overwritten.
         if self.overwriteTranscriptData == True:
@@ -277,8 +334,6 @@ class configVars:
             logging.info(
                 "Generated Question data will also be overwritten as Topic Model data is being overwritten."
             )
-
-        logging.info("All configuration parameters set up successfully.")
 
 
 class OpenAIBot:
@@ -383,26 +438,55 @@ class OpenAIBot:
 
 
 class LangChainBot:
-    """
-    Represents a language chain bot.
-
-    Args:
-        config (object): The configuration object containing the necessary parameters.
-
-    Attributes:
-        config (object): The configuration object.
-        model (str): The model used by the bot.
-        client (object): The langchainAzureOpenAI client.
-        chain (object): The QA chain.
-        prompt (str): The language chain prompt.
-        tokenUsage (int): The number of tokens used.
-
-    """
-
     def __init__(self, config):
+        """
+        Initializes an instance of the LangChainBot class.
+
+        Args:
+            config (dict): A dictionary containing configuration parameters.
+
+        Attributes:
+            config (dict): The configuration parameters.
+            model (str): The model specified in the configuration parameters.
+            client (None): The client object (initially set to None).
+            embeddings (None): Used only in LangChain-based Question Generation.
+            chain (None): Used only in BERTopic-based Question Generation.
+            tokenUsage (int): The token usage count.
+
+        """
         self.config = config
         self.model = self.config.openAIParams["MODEL"]
-        self.client = langchainAzureOpenAI(
+        self.client = None
+
+        self.embeddings = None  # Used only in LangChain-based Question Generation
+        self.chain = None  # Used only in BERTopic-based Question Generation
+        self.tokenUsage = 0
+
+        self.initialize()
+
+    def initialize(self):
+        """
+        Initializes the LangChainBot instance by calling the appropriate initialization methods based on the generation model specified in the configuration parameters.
+        """
+        self.initializeClient()
+
+        if self.config.generationModel == "BERTopic":
+            self.initializeChain()
+
+        elif self.config.generationModel == "LangChain":
+            self.initializeEmbeddings()
+
+        else:
+            logging.error(
+                f"Invalid generation model specified: {self.config.generationModel}, valid options are 'BERTopic' and 'LangChain'."
+            )
+            sys.exit("Invalid generation model specified. Exiting...")
+
+    def initializeClient(self):
+        """
+        Initializes the client object using the configuration parameters.
+        """
+        self.client = AzureChatOpenAI(
             api_key=self.config.openAIParams["KEY"],
             api_version=self.config.openAIParams["VERSION"],
             azure_endpoint=self.config.openAIParams["BASE"],
@@ -411,10 +495,23 @@ class LangChainBot:
             temperature=0,
         )
 
+    def initializeEmbeddings(self):
+        """
+        Initializes the embeddings object used for LangChain-based Question Generation using the configuration parameters.
+        """
+        self.embeddings = AzureOpenAIEmbeddings(
+            api_key=self.config.openAIParams["KEY"],
+            api_version=self.config.openAIParams["VERSION"],
+            azure_endpoint=self.config.openAIParams["BASE"],
+            organization=self.config.openAIParams["ORGANIZATION"],
+            azure_deployment="text-embedding-ada-002",  # This does not work if set to 'gpt-4', but seems to related to 'gpt-4' being the model used in the client.
+        )
+
+    def initializeChain(self):
+        """
+        Initializes the chain object used for BERTopic-based Question Generation using the client object.
+        """
         self.chain = load_qa_chain(
             self.client,
             chain_type="stuff",
         )
-
-        self.prompt = self.config.langchainPrompt
-        self.tokenUsage = 0

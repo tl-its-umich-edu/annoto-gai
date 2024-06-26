@@ -32,7 +32,7 @@ class TopicModeller:
         self.config = config
         self.videoData = videoData
         self.OpenAIChatBot = None
-        self.LangChainQABot = None
+        self.LangChainTopicBot = None
         self.representationModel = None
         self.tokenCount = 0
         self.callMaxLimit = 3
@@ -105,9 +105,9 @@ class TopicModeller:
         if representationModelType == "langchain":
             from bertopic.representation import LangChain
 
-            self.LangChainQABot = LangChainBot(self.config)
+            self.LangChainTopicBot = LangChainBot(self.config)
             self.representationModel = LangChain(
-                self.LangChainQABot.chain, prompt=self.LangChainQABot.prompt
+                self.LangChainTopicBot.chain, prompt=self.config.langchainPrompt
             )
 
     def initializeTopicModel(self, vectorizerModel=None, clusterModel=None):
