@@ -26,6 +26,7 @@ class Question(BaseModel):
                              which is at the end of a relevant transcript section.
         citations (List[int]): The integer IDs of the specific sources which were used to form the question.
     """
+
     question: str = Field(title="Question", description="Question formed by the model.")
     answers: List[str] = Field(
         title="Answers",
@@ -118,7 +119,9 @@ class LangChainQuestionData:
         self.videoData = videoData
         self.LangChainQuestionBot = LangChainBot(self.config)
         self.retriever = makeRetriever(
-            self.videoData.combinedTranscript, self.LangChainQuestionBot.embeddings
+            self.videoData.combinedTranscript,
+            self.LangChainQuestionBot.embeddings,
+            self.config.videoToUse,
         )
         self.runnable = makeRunnable(self.retriever, self.LangChainQuestionBot.client)
 
@@ -232,7 +235,9 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
 
         if questionData.responseInfo is not None:
             logging.info("Question Data loaded from saved files.")
-            logging.info(f"Question Data Count: {len(questionData.responseInfo.questions)}")
+            logging.info(
+                f"Question Data Count: {len(questionData.responseInfo.questions)}"
+            )
             return questionData
 
     if videoData is None:
@@ -252,21 +257,29 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
     return questionData
 
 
-def makeRetriever(transcript, embeddings) -> Chroma:
+def makeRetriever(transcript, embeddings, collectionName) -> Chroma:
     """
-    Creates a retriever object using the given transcript and embeddings.
+    Creates a retriever object using the given transcript, embeddings, and collection name.
 
     Args:
         transcript (str): The transcript to be used for creating the retriever.
         embeddings: The embeddings to be used for creating the retriever.
+        collectionName (str): The name of the collection.
 
     Returns:
         Chroma: The retriever object.
 
+    The collectionName matches the video name or parent folder name.
+    This is done to ensure that each transcript is associated with a unique retriever object.
+    So any data generated from the retriever can be associated with the correct video or parent folder.
     """
+    
+    collectionName = collectionName.replace(" ", "_")
     transcript = getMetadata(transcript)
     loader = DataFrameLoader(transcript, page_content_column="Combined Lines")
-    vectorstore = Chroma.from_documents(documents=loader.load(), embedding=embeddings)
+    vectorstore = Chroma.from_documents(
+        documents=loader.load(), embedding=embeddings, collection_name=collectionName
+    )
     retriever = vectorstore.as_retriever()
     return retriever
 
