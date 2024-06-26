@@ -170,7 +170,7 @@ class BERTopicQuestionData:
                 f"{i+1}. {item}" for i, item in enumerate(parsedResponse["answers"])
             )
             correct = f"Correct Answer: {parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
-            reason = f"Reason: {parsedResponse['reason'][:100]+'...'}"
+            reason = f"Reason: {parsedResponse['reason'][:100]}..."
             logging.info("\n".join([question, answers, correct, reason]))
 
     def printTokenCount(self):
