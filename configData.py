@@ -210,8 +210,11 @@ class configVars:
             "GENERATION_MODEL",
             self.generationModel,
             str,
-            lambda model: model in ["BERTopic", "LangChain"],
+            lambda model: model.lower() in ["bertopic", "langchain"],
         )
+        # This should allow for the model to be set to either 'BERTopic' or 'LangChain' in the .env file without being case-sensitive. 
+        if self.generationModel:
+            self.generationModel = {'bertopic': 'BERTopic', 'langchain': 'LangChain'}.get(self.generationModel.lower(), None)
         self.envImportSuccess[self.generationModel] = (
             False if not self.generationModel else True
         )
