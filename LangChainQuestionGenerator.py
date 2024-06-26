@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from datetime import datetime
 from configData import outputFolder, LangChainBot
 from utils import getMetadata, formatDocs, dataLoader, dataSaver
 
@@ -106,7 +107,8 @@ class LangChainQuestionData:
         self.LangChainQuestionBot = None
         self.retriever = None
         self.runnable = None
-        self.responseInfo: Questions = None
+        self.rawResponseInfo: Questions = None
+        self.responseInfo = None
 
     def initialize(self, videoData):
         """
@@ -136,7 +138,10 @@ class LangChainQuestionData:
         if load:
             self.loadQuestionData()
         else:
-            self.responseInfo = self.runnable.invoke(f"{self.config.questionCount}")
+            self.rawResponseInfo = self.runnable.invoke(f"{self.config.questionCount}")
+            self.responseInfo = processResponseData(
+                self.rawResponseInfo, self.videoData.combinedTranscript
+            )
 
     def loadQuestionData(self):
         """
@@ -207,7 +212,7 @@ class LangChainQuestionData:
         try:
             with open(questionSavePath, "w") as file:
                 writeLangChainDataToFile(
-                    file, self.config.videoToUse, self.responseInfo
+                    file, self.config.videoToUse, self.rawResponseInfo
                 )
             logging.info(f"Question Data saved to file: {questionSavePath}")
         except OSError:
@@ -235,9 +240,7 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
 
         if questionData.responseInfo is not None:
             logging.info("Question Data loaded from saved files.")
-            logging.info(
-                f"Question Data Count: {len(questionData.responseInfo.questions)}"
-            )
+            logging.info(f"Question Data Count: {len(questionData.responseInfo)}")
             return questionData
 
     if videoData is None:
@@ -253,7 +256,7 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
     questionData.saveQuestionData()
 
     logging.info("Question Data generated and saved for current configuration.")
-    logging.info(f"Question Data Count: {len(questionData.responseInfo.questions)}")
+    logging.info(f"Question Data Count: {len(questionData.responseInfo)}")
     return questionData
 
 
@@ -273,7 +276,7 @@ def makeRetriever(transcript, embeddings, collectionName) -> Chroma:
     This is done to ensure that each transcript is associated with a unique retriever object.
     So any data generated from the retriever can be associated with the correct video or parent folder.
     """
-    
+
     collectionName = collectionName.replace(" ", "_")
     transcript = getMetadata(transcript)
     loader = DataFrameLoader(transcript, page_content_column="Combined Lines")
@@ -349,3 +352,31 @@ def writeLangChainDataToFile(file, videoName, responseInfo):
         file.write(f"Reason: {question.reason}\n")
 
         file.write(f"Citations: {question.citations}\n\n")
+
+
+def processResponseData(responseInfo, transcript):
+    """
+    Process the response data and return a dictionary of processed information.
+
+    Args:
+        responseInfo (object): The response information object.
+        transcript (pandas.DataFrame): The transcript data.
+
+    Returns:
+        dict: A dictionary containing the processed data.
+
+    """
+    processedData = {}
+    for index, question in enumerate(responseInfo.questions):
+        citationData = transcript.iloc[question.citations[0]]
+        processedData[index] = {
+            "Start": datetime.strptime(citationData["Start"], "%H:%M:%S"),
+            "End": datetime.strptime(citationData["End"], "%H:%M:%S"),
+            "Topic": question.topic,
+            "Question": question.question,
+            "Answers": question.answers,
+            "Correct Answer Index": question.correctAnswerIndex,
+            "Reason": question.reason,
+        }
+
+    return processedData
