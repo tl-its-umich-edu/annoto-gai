@@ -1,6 +1,7 @@
 import sys
 import os
 import logging
+from datetime import datetime
 from configData import outputFolder, LangChainBot
 from utils import getMetadata, formatDocs, dataLoader, dataSaver
 
@@ -26,6 +27,7 @@ class Question(BaseModel):
                              which is at the end of a relevant transcript section.
         citations (List[int]): The integer IDs of the specific sources which were used to form the question.
     """
+
     question: str = Field(title="Question", description="Question formed by the model.")
     answers: List[str] = Field(
         title="Answers",
@@ -105,7 +107,8 @@ class LangChainQuestionData:
         self.LangChainQuestionBot = None
         self.retriever = None
         self.runnable = None
-        self.responseInfo: Questions = None
+        self.rawResponseInfo: Questions = None
+        self.responseInfo = None
 
     def initialize(self, videoData):
         """
@@ -118,7 +121,9 @@ class LangChainQuestionData:
         self.videoData = videoData
         self.LangChainQuestionBot = LangChainBot(self.config)
         self.retriever = makeRetriever(
-            self.videoData.combinedTranscript, self.LangChainQuestionBot.embeddings
+            self.videoData.combinedTranscript,
+            self.LangChainQuestionBot.embeddings,
+            self.config.videoToUse,
         )
         self.runnable = makeRunnable(self.retriever, self.LangChainQuestionBot.client)
 
@@ -133,7 +138,10 @@ class LangChainQuestionData:
         if load:
             self.loadQuestionData()
         else:
-            self.responseInfo = self.runnable.invoke(f"{self.config.questionCount}")
+            self.rawResponseInfo = self.runnable.invoke(f"{self.config.questionCount}")
+            self.responseInfo = processResponseData(
+                self.rawResponseInfo, self.videoData.combinedTranscript
+            )
 
     def loadQuestionData(self):
         """
@@ -162,57 +170,6 @@ class LangChainQuestionData:
             f" - {self.config.generationModel}",
         )
 
-    def printQuestions(self):
-        """
-        Prints the question data.
-        """
-        for index, question in enumerate(self.responseInfo.questions):
-            logging.info("\n---------------------------------------\n")
-            logging.info(f"Question {index+1}")
-            logging.info(f"Topic: {question.topic}")
-            logging.info(f"Insertion Point: {question.insertionTime}")
-            logging.info(f"Question {index+1}: {question.question[:100]+'...'}")
-            answers = "Answers: \n\t" + "\n\t".join(
-                [f"{i+1}. {item}" for i, item in enumerate(question.answers)]
-            )
-            logging.info(f"{answers}")
-            logging.info(
-                f"Correct Answer: {question.correctAnswerIndex+1}. {question.answers[question.correctAnswerIndex]}"
-            )
-            logging.info(f"Reason: {question.reason[:100]+'...'}")
-            logging.info(f"Citations: {question.citations}\n")
-
-    def saveToFile(self):
-        """
-        Saves the question data to a file.
-        """
-        saveFolder = os.path.join(outputFolder, self.config.videoToUse)
-        try:
-            if not os.path.exists(saveFolder):
-                logging.info(f"Creating directory for Output: {saveFolder}")
-                os.makedirs(saveFolder)
-        except OSError:
-            logging.warn(
-                f"Creation of the directory {saveFolder} failed. Data output will not be saved"
-            )
-        questionSavePath = os.path.join(
-            outputFolder,
-            self.config.videoToUse,
-            f"Questions - {self.config.generationModel}.txt",
-        )
-        logging.info(f"Saving Question Data to file: {questionSavePath}")
-        try:
-            with open(questionSavePath, "w") as file:
-                writeLangChainDataToFile(
-                    file, self.config.videoToUse, self.responseInfo
-                )
-            logging.info(f"Question Data saved to file: {questionSavePath}")
-        except OSError:
-            logging.warn(f"Failed to save question data to file: {questionSavePath}")
-        except Exception as e:
-            logging.warn(f"Failed to save question data to file: {questionSavePath}")
-            logging.warn(f"Error: {e}")
-
 
 def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
     """
@@ -232,7 +189,7 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
 
         if questionData.responseInfo is not None:
             logging.info("Question Data loaded from saved files.")
-            logging.info(f"Question Data Count: {len(questionData.responseInfo.questions)}")
+            logging.info(f"Question Data Count: {len(questionData.responseInfo)}")
             return questionData
 
     if videoData is None:
@@ -248,25 +205,35 @@ def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
     questionData.saveQuestionData()
 
     logging.info("Question Data generated and saved for current configuration.")
-    logging.info(f"Question Data Count: {len(questionData.responseInfo.questions)}")
+    logging.info(f"Question Data Count: {len(questionData.responseInfo)}")
     return questionData
 
 
-def makeRetriever(transcript, embeddings) -> Chroma:
+def makeRetriever(transcript, embeddings, collectionName) -> Chroma:
     """
-    Creates a retriever object using the given transcript and embeddings.
+    Creates a retriever object using the given transcript, embeddings, and collection name.
 
     Args:
         transcript (str): The transcript to be used for creating the retriever.
         embeddings: The embeddings to be used for creating the retriever.
+        collectionName (str): The name of the collection. 
+        In this case we use the name of the video or parent folder.
+        This refers to `VIDEO_TO_USE` in the config file, or the `videoToUse` attribute in the `configVars` class.
 
     Returns:
         Chroma: The retriever object.
 
+    The collectionName matches the video name or parent folder name.
+    This is done to ensure that each transcript is associated with a unique retriever object.
+    So any data generated from the retriever can be associated with the correct video or parent folder.
     """
+
+    collectionName = collectionName.replace(" ", "_")
     transcript = getMetadata(transcript)
     loader = DataFrameLoader(transcript, page_content_column="Combined Lines")
-    vectorstore = Chroma.from_documents(documents=loader.load(), embedding=embeddings)
+    vectorstore = Chroma.from_documents(
+        documents=loader.load(), embedding=embeddings, collection_name=collectionName
+    )
     retriever = vectorstore.as_retriever()
     return retriever
 
@@ -304,35 +271,29 @@ def makeRunnable(retriever, client):
     return runnable
 
 
-def writeLangChainDataToFile(file, videoName, responseInfo):
+def processResponseData(responseInfo, transcript):
     """
-    Writes the language chain data to a file.
+    Process the response data and return a dictionary of processed information.
 
     Args:
-        file (file): The file object to write the data to.
-        videoName (str): The name of the video or parent folder.
-        responseInfo (ResponseInfo): The response information containing the questions.
+        responseInfo (object): The response information object.
+        transcript (pandas.DataFrame): The transcript data.
 
     Returns:
-        None
+        dict: A dictionary containing the processed data.
+
     """
-    file.write(f"Video Name / Parent Folder: {videoName}\n")
+    processedData = {}
     for index, question in enumerate(responseInfo.questions):
-        file.write("\n---------------------------------------\n")
-        file.write(f"Question {index+1}\n")
-        file.write(f"Topic: {question.topic}\n")
+        citationData = transcript.iloc[question.citations[0]]
+        processedData[index] = {
+            "Start": datetime.strptime(citationData["Start"], "%H:%M:%S"),
+            "End": datetime.strptime(citationData["End"], "%H:%M:%S"),
+            "Topic": question.topic,
+            "Question": question.question,
+            "Answers": question.answers,
+            "Correct Answer Index": question.correctAnswerIndex,
+            "Reason": question.reason,
+        }
 
-        file.write(f"Insertion Point: {question.insertionTime}\n")
-
-        file.write(f"Question {index+1}: {question.question}\n")
-
-        answers = "Answers: \n\t" + "\n\t".join(
-            [f"{i+1}. {item}" for i, item in enumerate(question.answers)]
-        )
-        file.write(f"{answers}\n")
-        file.write(
-            f"Correct Answer: \n\t{question.correctAnswerIndex+1}. {question.answers[question.correctAnswerIndex]}\n"
-        )
-        file.write(f"Reason: {question.reason}\n")
-
-        file.write(f"Citations: {question.citations}\n\n")
+    return processedData
