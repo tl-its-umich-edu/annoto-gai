@@ -267,7 +267,9 @@ def makeRetriever(transcript, embeddings, collectionName) -> Chroma:
     Args:
         transcript (str): The transcript to be used for creating the retriever.
         embeddings: The embeddings to be used for creating the retriever.
-        collectionName (str): The name of the collection.
+        collectionName (str): The name of the collection. 
+        In this case we use the name of the video or parent folder.
+        This refers to `VIDEO_TO_USE` in the config file, or the `videoToUse` attribute in the `configVars` class.
 
     Returns:
         Chroma: The retriever object.
