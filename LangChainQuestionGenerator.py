@@ -170,57 +170,6 @@ class LangChainQuestionData:
             f" - {self.config.generationModel}",
         )
 
-    def printQuestions(self):
-        """
-        Prints the question data.
-        """
-        for index, question in enumerate(self.responseInfo.questions):
-            logging.info("\n---------------------------------------\n")
-            logging.info(f"Question {index+1}")
-            logging.info(f"Topic: {question.topic}")
-            logging.info(f"Insertion Point: {question.insertionTime}")
-            logging.info(f"Question {index+1}: {question.question[:100]+'...'}")
-            answers = "Answers: \n\t" + "\n\t".join(
-                [f"{i+1}. {item}" for i, item in enumerate(question.answers)]
-            )
-            logging.info(f"{answers}")
-            logging.info(
-                f"Correct Answer: {question.correctAnswerIndex+1}. {question.answers[question.correctAnswerIndex]}"
-            )
-            logging.info(f"Reason: {question.reason[:100]+'...'}")
-            logging.info(f"Citations: {question.citations}\n")
-
-    def saveToFile(self):
-        """
-        Saves the question data to a file.
-        """
-        saveFolder = os.path.join(outputFolder, self.config.videoToUse)
-        try:
-            if not os.path.exists(saveFolder):
-                logging.info(f"Creating directory for Output: {saveFolder}")
-                os.makedirs(saveFolder)
-        except OSError:
-            logging.warn(
-                f"Creation of the directory {saveFolder} failed. Data output will not be saved"
-            )
-        questionSavePath = os.path.join(
-            outputFolder,
-            self.config.videoToUse,
-            f"Questions - {self.config.generationModel}.txt",
-        )
-        logging.info(f"Saving Question Data to file: {questionSavePath}")
-        try:
-            with open(questionSavePath, "w") as file:
-                writeLangChainDataToFile(
-                    file, self.config.videoToUse, self.rawResponseInfo
-                )
-            logging.info(f"Question Data saved to file: {questionSavePath}")
-        except OSError:
-            logging.warn(f"Failed to save question data to file: {questionSavePath}")
-        except Exception as e:
-            logging.warn(f"Failed to save question data to file: {questionSavePath}")
-            logging.warn(f"Error: {e}")
-
 
 def retrieveLangChainQuestions(config, videoData=None, overwrite=False):
     """
@@ -320,40 +269,6 @@ def makeRunnable(retriever, client):
         | client.with_structured_output(schema=Questions)
     )
     return runnable
-
-
-def writeLangChainDataToFile(file, videoName, responseInfo):
-    """
-    Writes the language chain data to a file.
-
-    Args:
-        file (file): The file object to write the data to.
-        videoName (str): The name of the video or parent folder.
-        responseInfo (ResponseInfo): The response information containing the questions.
-
-    Returns:
-        None
-    """
-    file.write(f"Video Name / Parent Folder: {videoName}\n")
-    for index, question in enumerate(responseInfo.questions):
-        file.write("\n---------------------------------------\n")
-        file.write(f"Question {index+1}\n")
-        file.write(f"Topic: {question.topic}\n")
-
-        file.write(f"Insertion Point: {question.insertionTime}\n")
-
-        file.write(f"Question {index+1}: {question.question}\n")
-
-        answers = "Answers: \n\t" + "\n\t".join(
-            [f"{i+1}. {item}" for i, item in enumerate(question.answers)]
-        )
-        file.write(f"{answers}\n")
-        file.write(
-            f"Correct Answer: \n\t{question.correctAnswerIndex+1}. {question.answers[question.correctAnswerIndex]}\n"
-        )
-        file.write(f"Reason: {question.reason}\n")
-
-        file.write(f"Citations: {question.citations}\n\n")
 
 
 def processResponseData(responseInfo, transcript):

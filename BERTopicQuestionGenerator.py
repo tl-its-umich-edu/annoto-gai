@@ -132,47 +132,6 @@ class BERTopicQuestionData:
             f" - {self.config.generationModel}",
         )
 
-    def printQuestions(self):
-        """
-        Prints the generated questions, answers, correct answer, and reason for a given response.
-
-        This method iterates over the responseInfo DataFrame and processes each response to generate
-        questions and related information. It then logs the topic title, insert point, question,
-        answers, correct answer, and reason using the logging module.
-
-        Note:
-        - The responseInfo DataFrame should have the following columns: 'Response Data', 'Topic Title',
-          and 'End'.
-        - The 'Response Data' column should contain the response data in JSON format.
-
-        Returns:
-        None
-        """
-        for index, row in self.responseInfo.iterrows():
-            response = row["Response Data"]
-            response = response.strip("` \n")
-            if response.startswith("json"):
-                response = response[4:]
-
-            try:
-                parsedResponse = json.loads(response)
-            except json.JSONDecodeError as e:
-                logging.warn(
-                    f"Error decoding JSON: {e} for received response: {parsedResponse}"
-                )
-                logging.warn(f"Question for topic: {row['Topic Title']} not generated.")
-                continue
-
-            logging.info(f"Topic: {row['Topic Title']}")
-            logging.info(f"Insertion Point: {row['End'].strftime('%H:%M:%S')}")
-            question = f"Question: {parsedResponse['question'][:100]+'...'}"
-            answers = "Answers: \n\t" + "\n\t".join(
-                f"{i+1}. {item}" for i, item in enumerate(parsedResponse["answers"])
-            )
-            correct = f"Correct Answer: {parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
-            reason = f"Reason: {parsedResponse['reason'][:100]}..."
-            logging.info("\n".join([question, answers, correct, reason]))
-
     def printTokenCount(self):
         """
         Prints the token count.
@@ -180,42 +139,6 @@ class BERTopicQuestionData:
         logging.info(
             f"Question Generation Token Count: {self.tokenCount}",
         )
-
-    def saveToFile(self):
-        """
-        Saves the question data to a file.
-
-        This method creates a directory for the output if it doesn't exist,
-        and then saves the question data to a file named "Questions.txt" in
-        the output directory.
-
-        Returns:
-            None
-        """
-        saveFolder = os.path.join(outputFolder, self.config.videoToUse)
-        try:
-            if not os.path.exists(saveFolder):
-                logging.info(f"Creating directory for Output: {saveFolder}")
-                os.makedirs(saveFolder)
-        except OSError:
-            logging.warn(
-                f"Creation of the directory {saveFolder} failed. Data output will not be saved"
-            )
-        questionSavePath = os.path.join(
-            outputFolder,
-            self.config.videoToUse,
-            f"Questions - {self.config.generationModel}.txt",
-        )
-        logging.info(f"Saving Question Data to file: {questionSavePath}")
-        try:
-            with open(questionSavePath, "w") as file:
-                writeBERTopicDataToFile(file, self.config.videoToUse, self.responseInfo)
-            logging.info(f"Question Data saved to file: {questionSavePath}")
-        except OSError:
-            logging.warn(f"Failed to save question data to file: {questionSavePath}")
-        except Exception as e:
-            logging.warn(f"Failed to save question data to file: {questionSavePath}")
-            logging.warn(f"Error: {e}")
 
 
 # Using a manual overwrite option for debugging.
@@ -587,79 +510,3 @@ def getQuestionDataFromResponse(questionInfo, OpenAIChatBot):
         responseInfo["Response Data"][index] = response[0]
 
     return responseInfo.reset_index(drop=True)
-
-
-def writeBERTopicDataToFile(file, videoToUse, responseInfo):
-    """
-    Write information about response data to a file.
-
-    Args:
-        file (file object): The file object to write the information to.
-        videoToUse (str): The name of the video or parent folder.
-        responseInfo (pandas.DataFrame): The response data containing information about questions.
-
-    Returns:
-        None
-    """
-    file.write(f"Video Name / Parent Folder: {videoToUse}\n")
-    for index, row in responseInfo.iterrows():
-        response = row["Response Data"]
-        response = response.strip("` \n")
-        if response.startswith("json"):
-            response = response[4:]
-
-        startTime = row["Start"]
-        endTime = row["End"]
-        durationMin, durationSec = divmod((endTime - startTime).total_seconds(), 60)
-
-        file.write("\n---------------------------------------\n")
-        file.write(f"Question {index+1}\n")
-        file.write(f"Topic: {row['Topic Title']}\n")
-
-        # Retrieve the keywords for the topic.
-        keywords = row["Words"]
-        file.write(f"Keywords: {keywords}\n\n")
-
-        file.write(
-            f"Transcipt Segment: {startTime.strftime('%H:%M:%S')}"
-            + f" - {endTime.strftime('%H:%M:%S')}\n"
-        )
-        file.write(
-            f"Duration: {int(durationMin)} minutes & {int(durationSec)} seconds\n"
-        )
-
-        if "Original Start" in row and type(row["Original Start"]) == type(
-            row["Start"]
-        ):
-            trueDurationMin, trueDurationSec = divmod(
-                (endTime - row["Original Start"]).total_seconds(), 60
-            )
-            file.write(
-                f"\tTruncated from original duration of {int(trueDurationMin)} minutes & {int(trueDurationSec)} seconds\n"
-            )
-
-        file.write(f"Insertion Point: {row['End'].strftime('%H:%M:%S')}\n")
-
-        try:
-            parsedResponse = json.loads(response)
-            question = f"\nQuestion: {parsedResponse['question']}\n"
-            answers = "Answers: \n\t" + "\n\t".join(
-                [f"{i+1}. {item}" for i, item in enumerate(parsedResponse["answers"])]
-            )
-            correct = f"Correct Answer: \n\t{parsedResponse['answers'].index(parsedResponse['correct'])+1}. {parsedResponse['correct']}"
-            reason = f"Reason: {parsedResponse['reason']}\n"
-            file.write("\n".join([question, answers, correct, reason]))
-
-        except json.JSONDecodeError as e:
-            logging.warn(
-                f"Error decoding JSON: {e} for received response: {parsedResponse}"
-            )
-            logging.warn(
-                f"Question {index+1} for topic: {row['Topic Title']} not generated."
-            )
-
-            response = (
-                f"Error decoding JSON: {e} for received response: {parsedResponse}\n"
-                + f"Question {index+1} for topic: {row['Topic Title']} not generated.\n"
-            )
-            file.write(response)
