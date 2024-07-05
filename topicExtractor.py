@@ -116,8 +116,9 @@ class TopicModeller:
 
         Args:
             vectorizerModel (object, optional): Vectorizer model for the topic model. Defaults to None.
+            clusterModel (object, optional): Cluster model for the topic model. Defaults to None.
         """
-        if vectorizerModel is not None:
+        if vectorizerModel is not None and clusterModel is None:
             self.topicModel = BERTopic(
                 representation_model=self.representationModel,
                 vectorizer_model=vectorizerModel,
@@ -156,7 +157,7 @@ class TopicModeller:
 
                     if not KMeansAttempt:
                         logging.warn("Retrying without Vectorizer model.")
-                        self.useKMeans(None, docs)
+                        KMeansAttempt = self.useKMeans(None, docs)
 
                     if not KMeansAttempt:
                         logging.error("Failed to fit the topic model with K-means clustering. This is unexpected behavior. Exiting...")
