@@ -225,8 +225,7 @@ class TopicModeller:
             self.topics, probs = self.topicModel.fit_transform(docs)
             return True
         except Exception as e:
-            logging.error(f"Error Message: {e}")
-            logging.warn("Failed to fit the topic model with K-means clustering.")
+            logging.warn(f"Failed to fit the topic model with K-means clustering due to {e}")
             return False
 
     def getTopicsOverTime(self):
