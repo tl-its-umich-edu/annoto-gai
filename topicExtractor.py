@@ -150,16 +150,17 @@ class TopicModeller:
                 logging.info(f"Topics and probalities extracted from fitted successfully.")
 
                 if set(self.topics) == {-1}:
-                    logging.warning(
+                    logging.warn(
                         "All topics are -1. Retrying with K-means clustering..."
                     )
                     KMeansAttempt = self.useKMeans(vectorizerModel, docs)
 
+                    KMeansAttemptWithoutVectorizer = True
                     if not KMeansAttempt:
                         logging.warn("Retrying without Vectorizer model.")
-                        KMeansAttempt = self.useKMeans(None, docs)
+                        KMeansAttemptWithoutVectorizer = self.useKMeans(None, docs)
 
-                    if not KMeansAttempt:
+                    if not KMeansAttemptWithoutVectorizer:
                         logging.error("Failed to fit the topic model with K-means clustering. This is unexpected behavior. Exiting...")
                         return False
 
@@ -223,7 +224,8 @@ class TopicModeller:
             self.initializeTopicModel(vectorizerModel, clusterModel)
             self.topics, probs = self.topicModel.fit_transform(docs)
             return True
-        except:
+        except Exception as e:
+            logging.error(f"Error Message: {e}")
             logging.warn("Failed to fit the topic model with K-means clustering.")
             return False
 
