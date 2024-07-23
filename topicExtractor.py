@@ -116,8 +116,9 @@ class TopicModeller:
 
         Args:
             vectorizerModel (object, optional): Vectorizer model for the topic model. Defaults to None.
+            clusterModel (object, optional): Cluster model for the topic model. Defaults to None.
         """
-        if vectorizerModel is not None:
+        if vectorizerModel is not None and clusterModel is None:
             self.topicModel = BERTopic(
                 representation_model=self.representationModel,
                 vectorizer_model=vectorizerModel,
@@ -149,17 +150,19 @@ class TopicModeller:
                 logging.info(f"Topics and probalities extracted from fitted successfully.")
 
                 if set(self.topics) == {-1}:
-                    logging.warning(
+                    logging.warn(
                         "All topics are -1. Retrying with K-means clustering..."
                     )
-                    # This import should not occur frequently, so we only call when it is needed.
-                    from sklearn.cluster import KMeans
+                    KMeansAttempt = self.useKMeans(vectorizerModel, docs)
 
-                    # We use 3 clusters as a default value. 
-                    # This means the transcript will be grouped into 3 topics.
-                    clusterModel = KMeans(n_clusters=3)
-                    self.initializeTopicModel(vectorizerModel, clusterModel)
-                    self.topics, probs = self.topicModel.fit_transform(docs)
+                    KMeansAttemptWithoutVectorizer = True
+                    if not KMeansAttempt:
+                        logging.warn("Retrying without Vectorizer model.")
+                        KMeansAttemptWithoutVectorizer = self.useKMeans(None, docs)
+
+                    if not KMeansAttemptWithoutVectorizer:
+                        logging.error("Failed to fit the topic model with K-means clustering. This is unexpected behavior. Exiting...")
+                        return False
 
                 # We use `maxSentenceDuration` to determine the number of bins.
                 # This ensures that bins will always have atleast one sentence in them.
@@ -196,6 +199,34 @@ class TopicModeller:
                 f"Failed to send message at max limit of {self.callMaxLimit} times."
             )
             return False
+        
+    
+    def useKMeans(self, vectorizerModel, docs, n_clusters=3):
+        """
+        Applies K-means clustering algorithm to group the given documents into topics.
+
+        Args:
+            vectorizerModel: The vectorizer model used to transform the documents into feature vectors.
+            docs: The list of documents to be clustered.
+            n_clusters: The number of clusters/topics to be created (default is 3).
+
+        Returns:
+            None
+        """
+
+        # This import should not occur frequently, so we only call when it is needed.
+        from sklearn.cluster import KMeans
+
+        # We use 3 clusters as a default value. 
+        # This means the transcript will be grouped into 3 topics.
+        clusterModel = KMeans(n_clusters=n_clusters)
+        try:
+            self.initializeTopicModel(vectorizerModel, clusterModel)
+            self.topics, probs = self.topicModel.fit_transform(docs)
+            return True
+        except Exception as e:
+            logging.warn(f"Failed to fit the topic model with K-means clustering due to {e}")
+            return False
 
     def getTopicsOverTime(self):
         """
@@ -208,7 +239,7 @@ class TopicModeller:
             logging.error(
                 "Failed to fit the topic model. PLease check logs for possible errors."
             )
-            sys.exit("FTopic model fitting failed. Exiting...")
+            sys.exit("Topic model fitting failed. Exiting...")
 
         if representationModelType == "langchain":
             self.tokenCount = cb.total_tokens

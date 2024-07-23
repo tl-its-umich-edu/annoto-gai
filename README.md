@@ -1,4 +1,4 @@
-# annoto-gai
+# QuestionBot (Also known as annoto-gai)
 This is the Github Project to Annoto GAI work.
 
 ## Initial setup: 
